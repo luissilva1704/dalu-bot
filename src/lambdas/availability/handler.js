@@ -44,9 +44,9 @@ export const handler = async (event) => {
         capacityTotal: item.capacityTotal ?? 0,
         capacityAvailable: item.capacityAvailable ?? 0,
       }));
-      const availableSlotsArr = slots.filter((s) => s.capacityAvailable > 0).map((s) => s.slot);
+      const availableSlotsArr = slots.filter((s) => s.capacityAvailable > 0).map((s) => s.slot.toString() + ":" + "00");
       const availableSlots = availableSlotsArr.join(',');
-      const bookedSlots = slots.filter((s) => s.capacityAvailable < s.capacityTotal).map((s) => s.slot);
+      const bookedSlots = slots.filter((s) => s.capacityAvailable < s.capacityTotal).map((s) => s.slot.toString() + ":" + "00");
 
       return json(200, {
         day: qDay,
@@ -56,6 +56,7 @@ export const handler = async (event) => {
         slots,
         availableSlots,
         bookedSlots,
+        message: 'Availability fetched successfully'
       });
     }
 
@@ -71,7 +72,7 @@ export const handler = async (event) => {
         capacityTotal: item.capacityTotal ?? 0,
         capacityAvailable: item.capacityAvailable ?? 0,
       }));
-      const availableSlotsArr = slots.filter((s) => s.capacityAvailable > 0).map((s) => s.slot+":00");
+      const availableSlotsArr = slots.filter((s) => s.capacityAvailable > 0).map((s) => s.slot + ":" + "00");
       const availableSlots = availableSlotsArr.join(',');
       const bookedSlots = slots.filter((s) => s.capacityAvailable < s.capacityTotal).map((s) => s.slot);
 
@@ -85,7 +86,13 @@ export const handler = async (event) => {
       });
     }
 
-    return json(200, { availability, weekNumber, year, service });
+    return json(200,
+      {
+        availability,
+        weekNumber,
+        year,
+        service
+      });
   } catch (error) {
     console.error('availability handler error:', error);
     return json(400, {

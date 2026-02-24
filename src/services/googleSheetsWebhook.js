@@ -5,8 +5,10 @@
  * Failures are logged but do not throw (fire-and-forget).
  */
 
+import { toSpanishDay } from '../utils/dayMapping.js';
+
 const WEBHOOK_URL = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-const GOOGLE_SHEETS_SECRET = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+const GOOGLE_SHEETS_SECRET = process.env.GOOGLE_SHEETS_SECRET;
 
 /**
  * @param {Object} booking - Pre-reserve booking data
@@ -22,7 +24,7 @@ const GOOGLE_SHEETS_SECRET = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
  * @param {string} booking.status
  * @param {string} booking.createdAt
  */
-export async function sendBookingToGoogleSheets(booking,year,weekNumber,day,slot,month,dayOfMonth) {
+export async function sendBookingToGoogleSheets(booking,year,day,month,dayOfMonth) {
   if (!WEBHOOK_URL || WEBHOOK_URL.trim() === '') {
     return;
   }
@@ -34,21 +36,22 @@ export async function sendBookingToGoogleSheets(booking,year,weekNumber,day,slot
     records: [
       {
         id_cita: booking.bookingId,
-        año: year,
-        mes: month,
-        dia: dayOfMonth,
-        dia_semana: day,
-        hora_inicio: booking.slotHour.toString(),
-        fecha_hora_reserva: booking.createdAt,
-        usuario_instagram: booking.customerInstagram,
-        npmbre_usuario: booking.customerName,
-        id_tecnica: "Por asignar",
-        nombre_tecnica: "Por asignar",
-        servicio: booking.service,
-        estatus: "PENDING_ASSIGNMENT",
-        origen: "Instagram",
-        monto_total: 0,
-        nota: "Cita pre-reservada por Instagram"
+        Año: year,
+        Mes: month,
+        Dia: dayOfMonth,
+        Dia_semana: toSpanishDay(day),
+        Hora_inicio: booking.slotHour.toString()+":00",
+        Fecha_hora_reserva: booking.createdAt,
+        Usuario_instagram: booking.customerInstagram,
+        Nombre_usuario: booking.customerName,
+        Telefono: booking.phoneNumber ?? null,
+        Id_tecnica: "Por asignar",
+        Nombre_tecnica: "Por asignar",
+        Servicio: booking.service,
+        Estatus: "Confirmada - pendiente de asignación",
+        Origen: "Instagram",
+        Monto_total: 0,
+        Nota: "Cita pre-reservada por Instagram"
       },
     ],
   };
@@ -59,7 +62,15 @@ export async function sendBookingToGoogleSheets(booking,year,weekNumber,day,slot
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    console.log("response from sheets", response);
+
+    const bodyText = await response.text();
+    let bodyJson = null;
+    try {
+      bodyJson = JSON.parse(bodyText);
+    } catch {
+      bodyJson = bodyText;
+    }
+    console.log('[googleSheetsWebhook] response status:', response.status, 'body:', bodyJson);
 
     if (!response.ok) {
       console.warn(

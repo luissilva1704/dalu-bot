@@ -65,6 +65,7 @@ export const bookingSchema = z.object({
   service: z.enum(SERVICES),
   customerName: z.string().optional(),
   customerInstagram: z.string().optional(),
+  phoneNumber: z.string().optional(),
   year: z.coerce.number().int().min(2020).max(2100).optional(),
   weekNumber: z.coerce.number().int().min(1).max(53).optional(),
 });

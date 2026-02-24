@@ -15,6 +15,22 @@ export const SPANISH_TO_ENGLISH = {
 
 export const ENGLISH_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+export const ENGLISH_TO_SPANISH = {
+  monday: 'lunes',
+  tuesday: 'martes',
+  wednesday: 'miércoles',
+  thursday: 'jueves',
+  friday: 'viernes',
+  saturday: 'sábado',
+  sunday: 'domingo',
+};
+
+export function toSpanishDay(day) {
+  if (!day) return day;
+  const d = String(day).toLowerCase().trim();
+  return ENGLISH_TO_SPANISH[d] ?? day;
+}
+
 export function normalizeDay(day) {
   if (!day) return day;
   const d = String(day).toLowerCase().trim();

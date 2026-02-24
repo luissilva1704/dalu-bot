@@ -28,6 +28,7 @@ export class BookingsRepository {
     role,
     customerName,
     customerInstagram,
+    phoneNumber,
   }) {
     const bookingId = randomUUID();
     const pk = bookingPk(year, weekNumber, day);
@@ -49,6 +50,7 @@ export class BookingsRepository {
       status: 'PENDING_ASSIGNMENT',
       customerName: customerName ?? undefined,
       customerInstagram: customerInstagram ?? undefined,
+      phoneNumber: phoneNumber ?? undefined,
       createdAt: now,
       updatedAt: now,
     };

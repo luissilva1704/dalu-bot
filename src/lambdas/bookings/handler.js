@@ -51,7 +51,7 @@ export const handler = async (event) => {
     if (body.day) body.day = normalizeDay(body.day) ?? body.day;
 
     const parsed = bookingSchema.parse(body);
-    const { day, slot, service, customerName, customerInstagram } = parsed;
+    const { day, slot, service, customerName, customerInstagram, phoneNumber } = parsed;
     const { year, weekNumber } =
       parsed.year && parsed.weekNumber
         ? { year: parsed.year, weekNumber: parsed.weekNumber }
@@ -97,9 +97,10 @@ export const handler = async (event) => {
       role: parsed.role,
       customerName: customerName ?? null,
       customerInstagram: customerInstagram ?? null,
+      phoneNumber: phoneNumber ?? null,
     });
 
-    await sendBookingToGoogleSheets(booking,year,weekNumber,day,slot,month,dayOfMonth);
+    await sendBookingToGoogleSheets(booking,year,day,month,dayOfMonth);
 
     const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day);
     const slots = capacityItems.map((item) => ({
@@ -123,6 +124,7 @@ export const handler = async (event) => {
         technicianName: booking.technicianName ?? null,
         customerName: booking.customerName,
         customerInstagram: booking.customerInstagram,
+        phoneNumber: booking.phoneNumber ?? null,
         createdAt: booking.createdAt,
       },
       availability: {
