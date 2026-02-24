@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DynamoDB tables for Dalu Back Bot - Schedules, Bookings, Capacity'
+
+Parameters:
+  SchedulesTableName:
+    Type: String
+    Default: dalu-schedules
+    Description: Name for the Schedules table
+  
+  BookingsTableName:
+    Type: String
+    Default: dalu-bookings
+    Description: Name for the Bookings table
+
+  CapacityTableName:
+    Type: String
+    Default: dalu-capacity
+    Description: Name for the aggregated Capacity table
+
+Resources:
+  # Schedules: pk = W#year#week#D#day, sk = T#technicianId
+  # One partition per (year,week,day); one item per technician
+  SchedulesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref SchedulesTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: DaluBackBot
+        - Key: Environment
+          Value: Production
+
+  # Bookings: pk = W#year#week#D#day, sk = SLOT#hour#B#bookingId (pre-reserve) or SLOT#hour#T#techId (legacy)
+  # GSI by bookingId for lookup
+  BookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref BookingsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: bookingId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: byBookingId
+          KeySchema:
+            - AttributeName: bookingId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Project
+          Value: DaluBackBot
+        - Key: Environment
+          Value: Production
+
+  # Capacity: pk = Y#year#W#week#D#day, sk = S#slot (aggregated, no technician)
+  CapacityTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref CapacityTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Project
+          Value: DaluBackBot
+        - Key: Environment
+          Value: Production
+
+Outputs:
+  SchedulesTableName:
+    Description: Name of the Schedules table
+    Value: !Ref SchedulesTable
+    Export:
+      Name: !Sub '${AWS::StackName}-SchedulesTable'
+  
+  BookingsTableName:
+    Description: Name of the Bookings table
+    Value: !Ref BookingsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-BookingsTable'
+
+  CapacityTableName:
+    Description: Name of the Capacity table
+    Value: !Ref CapacityTable
+    Export:
+      Name: !Sub '${AWS::StackName}-CapacityTable'

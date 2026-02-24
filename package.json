@@ -1,0 +1,19 @@
+{
+    "name": "dalu_back_bot",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+      "dev": "node index.js",
+      "setup:tables": "node scripts/setup-dynamodb-tables.js"
+    },
+    "dependencies": {
+      "express": "^4.19.2",
+      "node-fetch": "^3.3.2",
+      "openai": "^4.0.0",
+      "@aws-sdk/client-dynamodb": "^3.654.0",
+      "@aws-sdk/lib-dynamodb": "^3.654.0",
+      "zod": "^3.23.8",
+      "cors": "^2.8.5"
+    }
+  }
+  
