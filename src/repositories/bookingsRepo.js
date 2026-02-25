@@ -83,6 +83,20 @@ export class BookingsRepository {
   }
 
   /**
+   * Get slots occupied by CONFIRMED bookings for a technician on a specific day.
+   * Uses getBookingsForDay + filter (works without byTechnician GSI).
+   * When byTechnician GSI exists, could be optimized to query it directly.
+   */
+  async getConfirmedSlotsByTechnicianDay(year, weekNumber, day, technicianId) {
+    const bookings = await this.getBookingsForDay(year, weekNumber, day);
+    const slots = bookings
+      .filter((b) => b.technicianId === technicianId && b.status === 'CONFIRMED')
+      .map((b) => b.slotHour)
+      .filter((s) => s != null);
+    return new Set(slots);
+  }
+
+  /**
    * Get all bookings for a (year, week, day)
    */
   async getBookingsForDay(year, weekNumber, day) {

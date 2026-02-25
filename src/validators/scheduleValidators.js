@@ -70,6 +70,26 @@ export const bookingSchema = z.object({
   weekNumber: z.coerce.number().int().min(1).max(53).optional(),
 });
 
+// --- Technician schedule query (GET own availability) ---
+export const technicianScheduleQuerySchema = z.object({
+  technicianId: z.string().min(1, 'technicianId is required'),
+  year: z.coerce.number().int().min(2020).max(2100).optional(),
+  weekNumber: z.coerce.number().int().min(1).max(53).optional(),
+  day: daySchema.optional(),
+});
+
+// --- Update technician schedule (replace day slots) ---
+export const updateTechnicianScheduleSchema = z.object({
+  year: z.coerce.number().int().min(2020).max(2100).optional(),
+  weekNumber: z.coerce.number().int().min(1).max(53).optional(),
+  technicianId: z.string().min(1, 'technicianId is required'),
+  day: daySchema,
+  slots: z.array(z.number().int().min(MIN_HOUR).max(MAX_HOUR)).refine(
+    (arr) => new Set(arr).size === arr.length,
+    { message: 'Slots must be unique' }
+  ),
+});
+
 // --- Assign booking ---
 export const assignBookingSchema = z.object({
   bookingId: z.string().uuid(),

@@ -1,20 +1,57 @@
-import express from 'express';
-import schedulesRepo from '../repositories/schedulesRepo.js';
-import capacityRepo from '../repositories/capacityRepo.js';
-import bookingsRepo from '../repositories/bookingsRepo.js';
+import schedulesRepo from '../../repositories/schedulesRepo.js';
+import capacityRepo from '../../repositories/capacityRepo.js';
+import bookingsRepo from '../../repositories/bookingsRepo.js';
+import { getCurrentWeekMexico } from '../../utils/week.js';
+import { normalizeDay } from '../../utils/dayMapping.js';
 import {
-  createScheduleSchema,
   updateTechnicianScheduleSchema,
   technicianScheduleQuerySchema,
-} from '../validators/scheduleValidators.js';
-import { getCurrentWeekMexico } from '../utils/week.js';
-import { normalizeDay } from '../utils/dayMapping.js';
+} from '../../validators/scheduleValidators.js';
 
-const router = express.Router();
+const json = (statusCode, data) => ({
+  statusCode,
+  headers: {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  },
+  body: JSON.stringify(data),
+});
 
-router.get('/technician', async (req, res, next) => {
+function parseBody(event) {
+  if (!event?.body) return {};
+  if (typeof event.body === 'string') {
+    try {
+      return JSON.parse(event.body);
+    } catch {
+      return {};
+    }
+  }
+  return event.body;
+}
+
+/**
+ * GET /api/schedules/technician - Consult technician's own schedule
+ * PUT /api/schedules/technician - Replace technician's slots for a day
+ */
+export const handler = async (event) => {
+  const method = (event?.httpMethod ?? event?.requestContext?.http?.method ?? '').toUpperCase();
+
+  if (method === 'GET') {
+    return handleGet(event);
+  }
+  if (method === 'PUT') {
+    return handlePut(event);
+  }
+
+  return json(405, { error: 'Method not allowed', message: `Unsupported method: ${method}` });
+};
+
+/**
+ * GET - Technician consults their loaded availability
+ */
+async function handleGet(event) {
   try {
-    const query = { ...req.query };
+    const query = event?.queryStringParameters ?? {};
     if (query.day) query.day = normalizeDay(query.day) ?? query.day;
 
     const parsed = technicianScheduleQuerySchema.parse(query);
@@ -27,36 +64,31 @@ router.get('/technician', async (req, res, next) => {
     if (day) {
       const schedule = await schedulesRepo.getScheduleForTechnicianDay(year, weekNumber, day, technicianId);
       if (!schedule) {
-        return res.status(404).json({
+        return json(404, {
           error: 'Not found',
           message: `No schedule found for technician ${technicianId} on ${day} (week ${weekNumber}).`,
         });
       }
-      return res.json({
+      return json(200, {
         year,
         weekNumber,
         technicianId,
         technicianName: schedule.technicianName,
         schedule: [
-          {
-            day: schedule.day,
-            slots: schedule.slots ?? [],
-            role: schedule.role,
-            services: schedule.services ?? [],
-          },
+          { day: schedule.day, slots: schedule.slots ?? [], role: schedule.role, services: schedule.services ?? [] },
         ],
       });
     }
 
     const schedule = await schedulesRepo.getTechnicianScheduleForWeek(year, weekNumber, technicianId);
     if (schedule.length === 0) {
-      return res.status(404).json({
+      return json(404, {
         error: 'Not found',
         message: `No schedule found for technician ${technicianId} (week ${weekNumber}, year ${year}).`,
       });
     }
 
-    res.json({
+    return json(200, {
       year,
       weekNumber,
       technicianId,
@@ -64,13 +96,20 @@ router.get('/technician', async (req, res, next) => {
       schedule,
     });
   } catch (error) {
-    next(error);
+    console.error('schedulesTechnician GET handler error:', error);
+    return json(400, {
+      error: 'Bad request',
+      details: error?.errors ?? String(error?.message ?? error),
+    });
   }
-});
+}
 
-router.put('/technician', async (req, res, next) => {
+/**
+ * PUT - Replace technician's slots for a specific day
+ */
+async function handlePut(event) {
   try {
-    const body = { ...req.body };
+    const body = parseBody(event);
     if (body.day) body.day = normalizeDay(body.day) ?? body.day;
 
     const parsed = updateTechnicianScheduleSchema.parse(body);
@@ -91,7 +130,7 @@ router.put('/technician', async (req, res, next) => {
       const slotsOcupados = await bookingsRepo.getConfirmedSlotsByTechnicianDay(year, weekNumber, day, technicianId);
       const blocked = removed.filter((s) => slotsOcupados.has(s));
       if (blocked.length > 0) {
-        return res.status(409).json({
+        return json(409, {
           error: 'Conflict',
           message: 'Cannot remove slots that have confirmed bookings.',
           blockedSlots: blocked,
@@ -112,7 +151,7 @@ router.put('/technician', async (req, res, next) => {
       slots: newSlots,
     });
 
-    res.json({
+    return json(200, {
       message: 'Schedule updated',
       day,
       technicianId,
@@ -122,62 +161,10 @@ router.put('/technician', async (req, res, next) => {
       removed,
     });
   } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/', async (req, res, next) => {
-  try {
-    const body = req.body;
-
-    if (body.schedules && !body.technician) {
-      return res.status(400).json({
-        error: 'Invalid payload',
-        message:
-          'Legacy format no longer supported. Use new format with year, weekNumber, technician, and availability.',
-      });
-    }
-
-    const parsed = createScheduleSchema.parse(body);
-    const { year, weekNumber, technician } = parsed;
-
-    for (const { day, slots } of parsed.availability) {
-      const oldSchedule = await schedulesRepo.getScheduleForTechnicianDay(year, weekNumber, day, technician.id);
-      const oldSlots = oldSchedule?.slots ?? [];
-      const newSlots = [...slots].sort((a, b) => a - b);
-
-      const added = newSlots.filter((s) => !oldSlots.includes(s));
-      const removed = oldSlots.filter((s) => !newSlots.includes(s));
-
-      await capacityRepo.batchAdjustFromDelta(year, weekNumber, day, added, removed);
-      await schedulesRepo.upsertTechnicianDay({
-        year,
-        weekNumber,
-        day,
-        technicianId: technician.id,
-        technicianName: technician.name,
-        role: technician.role,
-        services: technician.services,
-        slots: newSlots,
-      });
-    }
-
-    const results = parsed.availability.map(({ day, slots }) => ({
-      day,
-      slots: [...slots].sort((a, b) => a - b),
-      technicianId: technician.id,
-    }));
-
-    res.json({
-      message: 'Schedules updated successfully',
-      year,
-      weekNumber,
-      technicianId: technician.id,
-      schedules: results,
+    console.error('schedulesTechnician PUT handler error:', error);
+    return json(400, {
+      error: 'Bad request',
+      details: error?.errors ?? String(error?.message ?? error),
     });
-  } catch (error) {
-    next(error);
   }
-});
-
-export default router;
+};

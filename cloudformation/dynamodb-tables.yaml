@@ -42,7 +42,7 @@ Resources:
           Value: Production
 
   # Bookings: pk = W#year#week#D#day, sk = SLOT#hour#B#bookingId (pre-reserve) or SLOT#hour#T#techId (legacy)
-  # GSI by bookingId for lookup
+  # GSI by bookingId for lookup; GSI byTechnician for CONFIRMED bookings by technician+day
   BookingsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -55,6 +55,10 @@ Resources:
           AttributeType: S
         - AttributeName: bookingId
           AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
@@ -65,6 +69,14 @@ Resources:
           KeySchema:
             - AttributeName: bookingId
               KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: byTechnician
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
           Projection:
             ProjectionType: ALL
       Tags:

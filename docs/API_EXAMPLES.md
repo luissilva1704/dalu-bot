@@ -81,6 +81,81 @@ curl -X POST https://YOUR_API_URL/api/schedules \
   }'
 ```
 
+## 1a. GET /api/schedules/technician - Consultar disponibilidad cargada
+
+Permite que una técnica consulte el horario que ya cargó para una semana (o un día específico).
+
+**Semana completa:**
+```bash
+curl "https://YOUR_API_URL/api/schedules/technician?technicianId=tech_1&year=2026&weekNumber=5"
+```
+
+**Un día específico:**
+```bash
+curl "https://YOUR_API_URL/api/schedules/technician?technicianId=tech_1&year=2026&weekNumber=5&day=monday"
+```
+
+Respuesta 200 (semana):
+```json
+{
+  "year": 2026,
+  "weekNumber": 5,
+  "technicianId": "tech_1",
+  "technicianName": "Tania",
+  "schedule": [
+    { "day": "monday", "slots": [11, 12, 13, 14, 15], "role": "nails", "services": ["acrilico", "softgel"] },
+    { "day": "tuesday", "slots": [11, 14, 15, 16], "role": "nails", "services": ["acrilico", "softgel"] }
+  ]
+}
+```
+
+`year` y `weekNumber` son opcionales; si no se envían, se usa la semana actual (México).
+
+---
+
+## 1b. PUT /api/schedules/technician - Modificar horario de un día
+
+Reemplaza los slots de una técnica para un día específico. Actualiza `dalu-capacity` automáticamente.
+No permite quitar slots que tengan reservas CONFIRMED asignadas a esa técnica.
+
+```bash
+curl -X PUT https://YOUR_API_URL/api/schedules/technician \
+  -H "Content-Type: application/json" \
+  -d '{
+    "year": 2026,
+    "weekNumber": 5,
+    "technicianId": "tech_1",
+    "day": "monday",
+    "slots": [11, 12, 13, 14]
+  }'
+```
+
+Respuesta 200:
+```json
+{
+  "message": "Schedule updated",
+  "day": "monday",
+  "technicianId": "tech_1",
+  "oldSlots": [11, 12, 13],
+  "newSlots": [11, 12, 13, 14],
+  "added": [14],
+  "removed": []
+}
+```
+
+Si intentas quitar un slot con reserva confirmada:
+```json
+{
+  "error": "Conflict",
+  "message": "Cannot remove slots that have confirmed bookings.",
+  "blockedSlots": [12]
+}
+```
+
+`year` y `weekNumber` son opcionales; si no se envían, se usa la semana actual (México).
+
+---
+
 ### Borrar slots de un día (enviar array vacío)
 ```bash
 curl -X POST https://YOUR_API_URL/api/schedules \

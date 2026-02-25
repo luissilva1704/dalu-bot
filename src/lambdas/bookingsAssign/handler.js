@@ -1,5 +1,6 @@
 import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES } from '../../db/dynamo.js';
+import { bookingTechnicianGsiPk, bookingTechnicianGsiSk } from '../../utils/week.js';
 import schedulesRepo from '../../repositories/schedulesRepo.js';
 import bookingsRepo from '../../repositories/bookingsRepo.js';
 import capacityRepo from '../../repositories/capacityRepo.js';
@@ -79,6 +80,10 @@ export const handler = async (event) => {
 
     const newSlots = (techSchedule.slots ?? []).filter((s) => s !== slotHour).sort((a, b) => a - b);
 
+    const gsi1pk = bookingTechnicianGsiPk(technicianId, year, weekNumber, day);
+    const gsi1sk = bookingTechnicianGsiSk(slotHour, booking.bookingId);
+    const now = new Date().toISOString();
+
     await docClient.send(
       new TransactWriteCommand({
         TransactItems: [
@@ -87,15 +92,17 @@ export const handler = async (event) => {
               TableName: TABLES.BOOKINGS,
               Key: { pk: booking.pk, sk: booking.sk },
               UpdateExpression:
-                'SET technicianId = :tid, technicianName = :tname, #st = :status, updatedAt = :now',
+                'SET technicianId = :tid, technicianName = :tname, #st = :status, gsi1pk = :gsi1pk, gsi1sk = :gsi1sk, updatedAt = :now',
               ConditionExpression: '#st = :pending',
               ExpressionAttributeNames: { '#st': 'status' },
               ExpressionAttributeValues: {
                 ':tid': technicianId,
                 ':tname': technicianName ?? '',
                 ':status': 'CONFIRMED',
+                ':gsi1pk': gsi1pk,
+                ':gsi1sk': gsi1sk,
                 ':pending': 'PENDING_ASSIGNMENT',
-                ':now': new Date().toISOString(),
+                ':now': now,
               },
             },
           },
@@ -108,7 +115,7 @@ export const handler = async (event) => {
               ExpressionAttributeValues: {
                 ':newSlots': newSlots,
                 ':slot': slotHour,
-                ':now': new Date().toISOString(),
+                ':now': now,
               },
             },
           },

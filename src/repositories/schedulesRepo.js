@@ -118,6 +118,29 @@ export class SchedulesRepository {
   }
 
   /**
+   * Get a technician's schedule for a week (all days they have configured)
+   */
+  async getTechnicianScheduleForWeek(year, weekNumber, technicianId) {
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const schedule = [];
+
+    for (const day of days) {
+      const item = await this.getScheduleForTechnicianDay(year, weekNumber, day, technicianId);
+      if (item && (item.slots?.length ?? 0) > 0) {
+        schedule.push({
+          day: item.day,
+          slots: item.slots ?? [],
+          technicianName: item.technicianName,
+          role: item.role,
+          services: item.services ?? [],
+        });
+      }
+    }
+
+    return schedule;
+  }
+
+  /**
    * Get schedules for multiple days in a week
    */
   async getSchedulesForWeek(year, weekNumber, days, { service, role } = {}) {

@@ -39,8 +39,13 @@ function getISOWeekNumber(year, month, day) {
 
 const DAY_NAME_TO_ISO = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7 };
 
+const MONTH_NAMES_ES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
 /**
- * Get month (1-12) and day of month (1-31) from year, ISO week number, and day name
+ * Get month name (Spanish) and day of month (1-31) from year, ISO week number, and day name
  */
 export function getMonthAndDayFromWeek(year, weekNumber, dayName) {
   const dayOfWeek = DAY_NAME_TO_ISO[String(dayName).toLowerCase()] ?? 1;
@@ -49,7 +54,9 @@ export function getMonthAndDayFromWeek(year, weekNumber, dayName) {
   const mondayOfWeek1 = new Date(year, 0, 4 - dayOfJan4 + 1);
   const target = new Date(mondayOfWeek1);
   target.setDate(mondayOfWeek1.getDate() + (weekNumber - 1) * 7 + (dayOfWeek - 1));
-  return { month: target.getMonth() + 1, dayOfMonth: target.getDate() };
+  const monthIndex = target.getMonth();
+  const dayOfMonth = target.getDate();
+  return { month: MONTH_NAMES_ES[monthIndex], dayOfMonth };
 }
 
 /**
@@ -105,4 +112,13 @@ export function capacityPk(year, weekNumber, day) {
 
 export function capacitySk(slot) {
   return `S#${slot}`;
+}
+
+// --- Bookings GSI byTechnician (for CONFIRMED bookings) ---
+export function bookingTechnicianGsiPk(technicianId, year, weekNumber, day) {
+  return `TECH#${technicianId}#Y#${year}#W#${weekNumber}#D#${day}`;
+}
+
+export function bookingTechnicianGsiSk(slotHour, bookingId) {
+  return `S#${slotHour}#B#${bookingId}`;
 }
