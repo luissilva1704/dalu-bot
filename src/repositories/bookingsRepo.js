@@ -1,72 +1,93 @@
-import { PutCommand, QueryCommand, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+/**
+ * Bookings Repository - Fixed weekly capacity (NO technicians).
+ *
+ * pk = "Y#{year}#W#{weekNumber}#D#{day}"
+ * sk = "B#{slotStart}##{bookingId}"
+ *
+ * Each booking blocks multiple consecutive slots based on service duration.
+ * GSI: byBookingId (bookingId HASH) for lookup.
+ */
+
+import { PutCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES } from '../db/dynamo.js';
-import { bookingPk, bookingPreReserveSk } from '../utils/week.js';
+import { getMexicoCityNowISO } from '../utils/week.js';
 import { randomUUID } from 'crypto';
 
-/**
- * Bookings Repository - Pre-reserve (no technician) + Assign flow
- *
- * pk = "W#{year}#{weekNumber}#D#{day}"
- * sk = "SLOT#{hour}#B#{bookingId}"  (pre-reserve) or "SLOT#{hour}#T#{technicianId}" (legacy assigned)
- *
- * GSI: bookingId (HASH) for lookup by id
- *
- * Pre-reserve: technicianId null, status PENDING_ASSIGNMENT
- * Assigned: technicianId set, status CONFIRMED
- */
+// Capacity uses Y#year#W#week#D#day; keep booking pk format for consistency with capacity
+function bookingPk(year, weekNumber, day) {
+  return `Y#${year}#W#${weekNumber}#D#${day}`;
+}
+
+function bookingSk(slotStart, bookingId) {
+  return `B#${slotStart}#${bookingId}`;
+}
+
 export class BookingsRepository {
   /**
-   * Create pre-reserve booking (no technician, status PENDING_ASSIGNMENT)
-   * Must be called AFTER capacityRepo.decrementAvailableAtomically
+   * Create booking with atomic capacity decrement (TransactWrite).
+   * Decrements capacityAvailable by 1 for each slot in slotsBlocked.
+   * Creates booking in same transaction.
    */
-  async createPreReserveBooking({
+  async createBookingWithCapacityDecrement({
     year,
     weekNumber,
     day,
-    slotHour,
+    slotStart,
+    slotsBlocked,
     service,
-    role,
+    nailsTechnique,
+    durationHours,
     customerName,
     customerInstagram,
     phoneNumber,
+    capacityTransactItems,
   }) {
     const bookingId = randomUUID();
     const pk = bookingPk(year, weekNumber, day);
-    const sk = bookingPreReserveSk(slotHour, bookingId);
-    const now = new Date().toISOString();
+    const sk = bookingSk(slotStart, bookingId);
+    const now = getMexicoCityNowISO();
 
-    const item = {
+    const bookingItem = {
       pk,
       sk,
       bookingId,
       year,
       weekNumber,
       day,
-      slotHour,
+      slotStart,
+      slotsBlocked,
       service,
-      role: role ?? undefined,
-      technicianId: undefined,
-      technicianName: undefined,
-      status: 'PENDING_ASSIGNMENT',
+      nailsTechnique: nailsTechnique ?? undefined,
+      durationHours,
       customerName: customerName ?? undefined,
       customerInstagram: customerInstagram ?? undefined,
       phoneNumber: phoneNumber ?? undefined,
+      status: 'CONFIRMED',
       createdAt: now,
       updatedAt: now,
     };
 
+    const transactItems = [
+      ...capacityTransactItems,
+      {
+        Put: {
+          TableName: TABLES.BOOKINGS,
+          Item: bookingItem,
+        },
+      },
+    ];
+
     await docClient.send(
-      new PutCommand({
-        TableName: TABLES.BOOKINGS,
-        Item: item,
+      new TransactWriteCommand({
+        TransactItems: transactItems,
       })
     );
 
-    return item;
+    return bookingItem;
   }
 
   /**
-   * Get booking by bookingId (via GSI)
+   * Get booking by bookingId (via GSI byBookingId)
    */
   async getBookingById(bookingId) {
     const result = await docClient.send(
@@ -83,17 +104,10 @@ export class BookingsRepository {
   }
 
   /**
-   * Get slots occupied by CONFIRMED bookings for a technician on a specific day.
-   * Uses getBookingsForDay + filter (works without byTechnician GSI).
-   * When byTechnician GSI exists, could be optimized to query it directly.
+   * @deprecated No technician assignments in fixed capacity model. Returns empty.
    */
   async getConfirmedSlotsByTechnicianDay(year, weekNumber, day, technicianId) {
-    const bookings = await this.getBookingsForDay(year, weekNumber, day);
-    const slots = bookings
-      .filter((b) => b.technicianId === technicianId && b.status === 'CONFIRMED')
-      .map((b) => b.slotHour)
-      .filter((s) => s != null);
-    return new Set(slots);
+    return new Set();
   }
 
   /**
@@ -111,41 +125,6 @@ export class BookingsRepository {
     );
 
     return result.Items ?? [];
-  }
-
-  /**
-   * Update booking: assign technician, set status CONFIRMED
-   * Condition: status must be PENDING_ASSIGNMENT
-   */
-  async updateBookingAssign(bookingId, technicianId, technicianName) {
-    const booking = await this.getBookingById(bookingId);
-    if (!booking) return null;
-
-    const now = new Date().toISOString();
-
-    await docClient.send(
-      new UpdateCommand({
-        TableName: TABLES.BOOKINGS,
-        Key: { pk: booking.pk, sk: booking.sk },
-        UpdateExpression:
-          'SET technicianId = :tid, technicianName = :tname, #st = :status, updatedAt = :now',
-        ConditionExpression: '#st = :pending',
-        ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: {
-          ':tid': technicianId,
-          ':tname': technicianName ?? '',
-          ':status': 'CONFIRMED',
-          ':pending': 'PENDING_ASSIGNMENT',
-          ':now': now,
-        },
-      })
-    );
-
-    return { ...booking, technicianId, technicianName, status: 'CONFIRMED', updatedAt: now };
-  }
-
-  getSlotHour(booking) {
-    return booking.slotHour;
   }
 }
 

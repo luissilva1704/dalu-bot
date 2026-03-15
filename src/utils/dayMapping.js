@@ -16,13 +16,12 @@ export const SPANISH_TO_ENGLISH = {
 export const ENGLISH_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 export const ENGLISH_TO_SPANISH = {
-  monday: 'lunes',
-  tuesday: 'martes',
-  wednesday: 'miércoles',
-  thursday: 'jueves',
-  friday: 'viernes',
-  saturday: 'sábado',
-  sunday: 'domingo',
+  monday: 'Lunes',
+  tuesday: 'Martes',
+  wednesday: 'Miércoles',
+  thursday: 'Jueves',
+  friday: 'Viernes',
+  saturday: 'Sábado',
 };
 
 export function toSpanishDay(day) {

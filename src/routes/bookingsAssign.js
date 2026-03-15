@@ -4,7 +4,7 @@ import schedulesRepo from '../repositories/schedulesRepo.js';
 import capacityRepo from '../repositories/capacityRepo.js';
 import { docClient, TABLES } from '../db/dynamo.js';
 import { TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
-import { assignBookingSchema } from '../validators/scheduleValidators.js';
+import { assignBookingSchema, getAssignFilterFromBooking } from '../validators/scheduleValidators.js';
 
 const router = express.Router();
 
@@ -27,7 +27,8 @@ router.put('/', async (req, res, next) => {
       });
     }
 
-    const { year, weekNumber, day, slotHour, service, role } = booking;
+    const { year, weekNumber, day, slotHour } = booking;
+    const { service, role } = getAssignFilterFromBooking(booking);
     const scheduleItems = await schedulesRepo.getSchedulesForDay(year, weekNumber, day, {
       service,
       role,
@@ -100,7 +101,8 @@ router.put('/', async (req, res, next) => {
         bookingId: updated.bookingId,
         day: updated.day,
         slot: updated.slotHour,
-        service: updated.service,
+        serviceName: updated.serviceName,
+        nailsTechnique: updated.nailsTechnique ?? null,
         status: 'CONFIRMED',
         technicianId,
         technicianName: technicianName ?? '',

@@ -1,16 +1,14 @@
 // Precios base por servicio y longitud
 export const BASE_PRICES = {
   gel: {
-    corto: 180,    // 1-2 tonos
-    medio: 190,    // 3-5 tonos
-    largo: 190,    // 3-5 tonos
-    xl: 190        // 3-5 tonos
+    corto: 200,    // 1-2 tonos
+    medio: 220,    // 3-5 tonos
+    largo: 250    // 3-5 tonos
   },
   rubber: {
-    corto: 230,    // 1 tono base
+    corto: 250,    // 1 tono base
     medio: 230,
-    largo: 230,
-    xl: 230
+    largo: 230
   },
   softgel: {
     corto: 300,    // Tip corto
@@ -23,6 +21,9 @@ export const BASE_PRICES = {
     medio: 310,    // Largo 2
     largo: 330,    // Largo 3
     xl: 350,       // Largo 4
+  },
+  acrylic_bath: {
+    corto: 250
   }
 };
 
@@ -47,10 +48,7 @@ export const DESIGN_PRICES = {
 // Precios adicionales de servicios
 export const ADDITIONAL_SERVICES = {
   gel_removal: 70,
-  gel_manicure: 150,
+  manicure: 65,
   acrylic_removal: 120,
-  acrylic_manicure: 180,
-  acrylic_bath: 250,
   rubber_touchup: 200
 };
-  

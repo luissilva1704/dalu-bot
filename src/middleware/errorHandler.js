@@ -35,16 +35,27 @@ export function errorHandler(err, req, res, next) {
   if (err.name === 'ResourceNotFoundException') {
     return res.status(404).json({
       error: 'Not found',
-      message: 'Resource not found',
+      message: err.message || 'Resource not found',
+      details: err.message,
     });
   }
 
-  // Default error response
-  const status = err.status || err.statusCode || 500;
+  // AccessDeniedException, etc.
+  if (err.name === 'AccessDeniedException' || err.code === 'AccessDeniedException') {
+    return res.status(403).json({
+      error: 'Access denied',
+      message: err.message || 'Cannot access DynamoDB table',
+      details: err.message,
+    });
+  }
+
+  // Default error response (AWS SDK v3 uses err.$metadata?.httpStatusCode)
+  const status = err.status ?? err.statusCode ?? err.$metadata?.httpStatusCode ?? 500;
   const message = err.message || 'Internal server error';
 
   res.status(status).json({
     error: status === 500 ? 'Internal server error' : message,
-    ...(process.env.NODE_ENV === 'development' && { details: err.stack }),
+    details: message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 }

@@ -4,22 +4,25 @@ import {
   QueryCommand,
   UpdateCommand,
   DeleteCommand,
+  BatchWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { docClient, TABLES } from '../db/dynamo.js';
 import { capacityPk, capacitySk } from '../utils/week.js';
 
+import { FIXED_DAYS, FIXED_SLOTS, CAPACITY_PER_SLOT } from '../utils/fixedSchedule.js';
+
 /**
- * Capacity Repository - Aggregated capacity per week/day/slot
+ * Capacity Repository - Fixed weekly capacity (admin-managed, NO technicians)
  *
  * Design: dalu-capacity
  * pk = "Y#{year}#W#{weekNumber}#D#{day}"
  * sk = "S#{slot}"
  * attributes: capacityTotal, capacityAvailable, updatedAt
  *
- * Updated automatically when technicians load schedules (POST schedules).
- * Decremented atomically when pre-reserve bookings are created.
- * availability depends ONLY on this table (not schedules).
+ * - Admin resets week via POST /api/schedules/reset-week
+ * - Bookings decrement capacityAvailable for multiple consecutive slots (by service duration)
+ * - Availability reads ONLY from this table
  */
 export class CapacityRepository {
   /**
@@ -181,7 +184,7 @@ export class CapacityRepository {
 
   /**
    * Batch adjust capacity from delta (added/removed slots)
-   * When technician updates schedule: added slots += 1, removed slots -= 1
+   * @deprecated Technician-based logic. Kept for backward compatibility during migration.
    */
   async batchAdjustFromDelta(year, weekNumber, day, addedSlots, removedSlots) {
     for (const slot of addedSlots) {
@@ -191,7 +194,138 @@ export class CapacityRepository {
       await this.adjustSlotCapacity(year, weekNumber, day, slot, -1, -1);
     }
   }
-}
 
+  /**
+   * Build TransactWriteItems to atomically decrement capacityAvailable by 1 for each slot.
+   * Use with TransactWriteCommand. Condition: capacityAvailable > 0 for each.
+   * @returns {Array} TransactItems for docClient.send(TransactWriteCommand)
+   */
+  buildDecrementTransactItems(year, weekNumber, day, slots) {
+    const now = new Date().toISOString();
+    return slots.map((slot) => {
+      const pk = capacityPk(year, weekNumber, day);
+      const sk = capacitySk(slot);
+      return {
+        Update: {
+          TableName: TABLES.CAPACITY,
+          Key: { pk, sk },
+          UpdateExpression: 'SET capacityAvailable = capacityAvailable - :one, updatedAt = :now',
+          ConditionExpression: 'capacityAvailable > :zero',
+          ExpressionAttributeValues: { ':one': 1, ':zero': 0, ':now': now },
+        },
+      };
+    });
+  }
+
+  /**
+   * Borra todos los items de capacidad de una o más semanas.
+   * @param {number|Array<{year: number, weekNumber: number}>} yearOrWeeks - year (si weekNumber) o array de {year, weekNumber}
+   * @param {number} [weekNumber] - número de semana (si no es array)
+   */
+  async deleteWeek(yearOrWeeks, weekNumber) {
+    const weeks = Array.isArray(yearOrWeeks)
+      ? yearOrWeeks
+      : [{ year: yearOrWeeks, weekNumber }];
+
+    for (const { year, weekNumber: wn } of weeks) {
+      for (const day of FIXED_DAYS) {
+        const pk = capacityPk(year, wn, day);
+        const result = await docClient.send(
+          new QueryCommand({
+            TableName: TABLES.CAPACITY,
+            KeyConditionExpression: 'pk = :pk',
+            ExpressionAttributeValues: { ':pk': pk },
+          })
+        );
+        const items = result.Items ?? [];
+        if (items.length > 0) {
+          const deleteBatch = items.map((item) => ({
+            DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
+          }));
+          for (let i = 0; i < deleteBatch.length; i += 25) {
+            const batch = deleteBatch.slice(i, i + 25);
+            await docClient.send(
+              new BatchWriteCommand({
+                RequestItems: { [TABLES.CAPACITY]: batch },
+              })
+            );
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Reset full week capacity: tuesday–saturday, slots 11–20, capacity 2 per slot.
+   * Elimina todos los items existentes de la semana y crea nuevos (sobrescritura total).
+   * No deja valores antiguos.
+   */
+  async resetWeek(year, weekNumber) {
+    await this.deleteWeek(year, weekNumber);
+    for (const day of FIXED_DAYS) {
+      const pk = capacityPk(year, weekNumber, day);
+      const result = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.CAPACITY,
+          KeyConditionExpression: 'pk = :pk',
+          ExpressionAttributeValues: { ':pk': pk },
+        })
+      );
+      const items = result.Items ?? [];
+      if (items.length > 0) {
+        const deleteBatch = items.map((item) => ({
+          DeleteRequest: { Key: { pk: item.pk, sk: item.sk } },
+        }));
+        for (let i = 0; i < deleteBatch.length; i += 25) {
+          const batch = deleteBatch.slice(i, i + 25);
+          await docClient.send(
+            new BatchWriteCommand({
+              RequestItems: { [TABLES.CAPACITY]: batch },
+            })
+          );
+        }
+      }
+    }
+
+    const now = new Date().toISOString();
+    const putRequests = [];
+    for (const day of FIXED_DAYS) {
+      for (const slot of FIXED_SLOTS) {
+        const pk = capacityPk(year, weekNumber, day);
+        const sk = capacitySk(slot);
+        putRequests.push({
+          PutRequest: {
+            Item: {
+              pk,
+              sk,
+              year,
+              weekNumber,
+              day,
+              slot,
+              capacityTotal: CAPACITY_PER_SLOT,
+              capacityAvailable: CAPACITY_PER_SLOT,
+              updatedAt: now,
+            },
+          },
+        });
+      }
+    }
+
+    for (let i = 0; i < putRequests.length; i += 25) {
+      const batch = putRequests.slice(i, i + 25);
+      await docClient.send(
+        new BatchWriteCommand({
+          RequestItems: { [TABLES.CAPACITY]: batch },
+        })
+      );
+    }
+
+    return {
+      daysProcessed: FIXED_DAYS.length,
+      slotsPerDay: FIXED_SLOTS.length,
+      totalSlots: putRequests.length,
+    };
+  }
+}
 
 export default new CapacityRepository();

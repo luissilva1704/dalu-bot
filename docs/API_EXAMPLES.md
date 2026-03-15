@@ -1,8 +1,10 @@
-# API Examples - Technician Weekly Availability
+# API Examples - Fixed Weekly Capacity
+
+Sistema de capacidad fija administrada por admins. Sin lógica por técnica.
 
 ## Setup (crear tablas)
 
-Requeridas: dalu-schedules, dalu-bookings (con GSI byBookingId), dalu-capacity.
+Requeridas: dalu-capacity, dalu-bookings (con GSI byBookingId).
 
 Variables de entorno:
 ```
@@ -11,324 +13,222 @@ DYNAMO_TABLE_BOOKINGS=dalu-bookings
 DYNAMO_TABLE_CAPACITY=dalu-capacity
 ```
 
-Las tablas deben usar el nuevo esquema:
-- **Schedules**: `pk` (HASH), `sk` (RANGE)
-- **Bookings**: `pk` (HASH), `sk` (RANGE)
-
-Si ya tienes tablas con el esquema viejo (`day` como HASH en Schedules), debes recrearlas.
-Ver `cloudformation/dynamodb-tables.yaml` actualizado.
+**dalu-schedules** queda deprecada (el sistema usa solo dalu-capacity para disponibilidad).
 
 ---
 
-## 1. POST /api/schedules - Subir disponibilidad de 3 técnicas
+## 1. POST /api/schedules/reset-week - Resetear capacidad semanal
 
-### Técnica 1 (Tania)
-```bash
-curl -X POST https://YOUR_API_URL/api/schedules \
-  -H "Content-Type: application/json" \
-  -d '{
-    "year": 2026,
-    "weekNumber": 5,
-    "technician": {
-      "id": "tech_1",
-      "name": "Tania",
-      "role": "nails",
-      "services": ["acrilico", "softgel"]
-    },
-    "availability": [
-      { "day": "monday", "slots": [11, 12, 13, 14, 15] },
-      { "day": "tuesday", "slots": [11, 14, 15, 16] }
-    ]
-  }'
-```
-
-### Técnica 2 (María)
-```bash
-curl -X POST https://YOUR_API_URL/api/schedules \
-  -H "Content-Type: application/json" \
-  -d '{
-    "year": 2026,
-    "weekNumber": 5,
-    "technician": {
-      "id": "tech_2",
-      "name": "María",
-      "role": "nails",
-      "services": ["acrilico", "gel"]
-    },
-    "availability": [
-      { "day": "monday", "slots": [11, 12, 13] },
-      { "day": "tuesday", "slots": [14, 15, 16, 17] }
-    ]
-  }'
-```
-
-### Técnica 3 (Lupita)
-```bash
-curl -X POST https://YOUR_API_URL/api/schedules \
-  -H "Content-Type: application/json" \
-  -d '{
-    "year": 2026,
-    "weekNumber": 5,
-    "technician": {
-      "id": "tech_3",
-      "name": "Lupita",
-      "role": "nails",
-      "services": ["acrilico", "softgel", "rubber"]
-    },
-    "availability": [
-      { "day": "monday", "slots": [11, 12, 13, 14, 15, 16] }
-    ]
-  }'
-```
-
-## 1a. GET /api/schedules/technician - Consultar disponibilidad cargada
-
-Permite que una técnica consulte el horario que ya cargó para una semana (o un día específico).
-
-**Semana completa:**
-```bash
-curl "https://YOUR_API_URL/api/schedules/technician?technicianId=tech_1&year=2026&weekNumber=5"
-```
-
-**Un día específico:**
-```bash
-curl "https://YOUR_API_URL/api/schedules/technician?technicianId=tech_1&year=2026&weekNumber=5&day=monday"
-```
-
-Respuesta 200 (semana):
-```json
-{
-  "year": 2026,
-  "weekNumber": 5,
-  "technicianId": "tech_1",
-  "technicianName": "Tania",
-  "schedule": [
-    { "day": "monday", "slots": [11, 12, 13, 14, 15], "role": "nails", "services": ["acrilico", "softgel"] },
-    { "day": "tuesday", "slots": [11, 14, 15, 16], "role": "nails", "services": ["acrilico", "softgel"] }
-  ]
-}
-```
-
-`year` y `weekNumber` son opcionales; si no se envían, se usa la semana actual (México).
-
----
-
-## 1b. PUT /api/schedules/technician - Modificar horario de un día
-
-Reemplaza los slots de una técnica para un día específico. Actualiza `dalu-capacity` automáticamente.
-No permite quitar slots que tengan reservas CONFIRMED asignadas a esa técnica.
+Permite a los administradores resetear la capacidad con horarios fijos: martes a sábado, slots 11-20, capacidad 2 por slot. Permite reservar hasta las 18 como hora de inicio (incluso servicios de 3h). No requiere parámetros. **Borra la semana actual y crea las dos semanas siguientes** (ej: si estamos en semana 11, borra semana 11 y crea semanas 12 y 13). Pensado para ejecutarse los sábados o domingos (America/Mexico_City).
 
 ```bash
-curl -X PUT https://YOUR_API_URL/api/schedules/technician \
-  -H "Content-Type: application/json" \
-  -d '{
-    "year": 2026,
-    "weekNumber": 5,
-    "technicianId": "tech_1",
-    "day": "monday",
-    "slots": [11, 12, 13, 14]
-  }'
-```
-
-Respuesta 200:
-```json
-{
-  "message": "Schedule updated",
-  "day": "monday",
-  "technicianId": "tech_1",
-  "oldSlots": [11, 12, 13],
-  "newSlots": [11, 12, 13, 14],
-  "added": [14],
-  "removed": []
-}
-```
-
-Si intentas quitar un slot con reserva confirmada:
-```json
-{
-  "error": "Conflict",
-  "message": "Cannot remove slots that have confirmed bookings.",
-  "blockedSlots": [12]
-}
-```
-
-`year` y `weekNumber` son opcionales; si no se envían, se usa la semana actual (México).
-
----
-
-### Borrar slots de un día (enviar array vacío)
-```bash
-curl -X POST https://YOUR_API_URL/api/schedules \
-  -H "Content-Type: application/json" \
-  -d '{
-    "year": 2026,
-    "weekNumber": 5,
-    "technician": {
-      "id": "tech_1",
-      "name": "Tania",
-      "role": "nails",
-      "services": ["acrilico"]
-    },
-    "availability": [
-      { "day": "tuesday", "slots": [] }
-    ]
-  }'
-```
-
----
-
-## 2. GET /api/availability - Consultar disponibilidad con capacidad
-
-### Un día (semana actual, service=acrilico)
-```bash
-curl "https://YOUR_API_URL/api/availability?day=monday&service=acrilico"
-```
-
-### Con week y year explícitos
-```bash
-curl "https://YOUR_API_URL/api/availability?day=monday&service=acrilico&year=2026&weekNumber=5"
-```
-
-### Respuesta ejemplo (día específico)
-```json
-{
-  "day": "monday",
-  "service": "acrilico",
-  "weekNumber": 5,
-  "year": 2026,
-  "slots": [
-    { "slot": 11, "capacityTotal": 3, "capacityAvailable": 3 },
-    { "slot": 12, "capacityTotal": 3, "capacityAvailable": 2 },
-    { "slot": 13, "capacityTotal": 3, "capacityAvailable": 1 }
-  ],
-  "availableSlots": "11,12,13",
-  "bookedSlots": [12, 13]
-}
-```
-
-### Todos los días
-```bash
-curl "https://YOUR_API_URL/api/availability?service=acrilico&year=2026&weekNumber=5"
-```
-
-### Día en español
-```bash
-curl "https://YOUR_API_URL/api/availability?day=lunes&service=acrilico"
-```
-
----
-
-## 3. PUT /api/bookings - Pre-reserva (sin técnica)
-
-Crea una reserva consumiendo capacidad agregada. La técnica se asigna después con PUT /api/bookings/assign.
-
-### Primera reserva (asigna tech_1)
-```bash
-curl -X POST https://YOUR_API_URL/api/bookings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "day": "monday",
-    "slot": 11,
-    "service": "acrilico",
-    "customerName": "Cliente 1",
-    "customerInstagram": "@cliente1"
-  }'
-```
-
-### Segunda reserva (asigna tech_2 u otra técnica disponible)
-```bash
-curl -X PUT https://YOUR_API_URL/api/bookings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "day": "monday",
-    "slot": 11,
-    "service": "acrilico",
-    "customerName": "Cliente 2",
-    "customerInstagram": "@cliente2"
-  }'
-```
-
-### Tercera reserva (asigna tech_3)
-```bash
-curl -X PUT https://YOUR_API_URL/api/bookings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "day": "monday",
-    "slot": 11,
-    "service": "acrilico",
-    "customerName": "Cliente 3",
-    "customerInstagram": "@cliente3"
-  }'
-```
-
-### Cuarta reserva → 409 Conflict (no hay capacidad)
-```bash
-curl -X PUT https://YOUR_API_URL/api/bookings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "day": "monday",
-    "slot": 11,
-    "service": "acrilico",
-    "customerName": "Cliente 4"
-  }'
-```
-
-**Respuesta 409:**
-```json
-{
-  "error": "No capacity",
-  "message": "Slot 11 is fully booked for monday."
-}
-```
-
----
-
-## 4. PUT /api/bookings/assign - Asignar técnica a reserva
-
-Usa el `bookingId` devuelto al crear la pre-reserva.
-
-```bash
-curl -X PUT https://YOUR_API_URL/api/bookings/assign \
-  -H "Content-Type: application/json" \
-  -d '{
-    "bookingId": "abc-123-uuid-del-response",
-    "technicianId": "tech_1",
-    "technicianName": "Tania"
-  }'
+curl -X POST https://YOUR_API_URL/api/schedules/reset-week \
+  -H "Content-Type: application/json"
 ```
 
 **Respuesta 200:**
 ```json
 {
-  "message": "Technician assigned successfully",
-  "booking": {
-    "bookingId": "abc-123-...",
-    "day": "monday",
+  "message": "Week capacity reset successfully (2 weeks)",
+  "weeksCreated": [
+    {
+      "year": 2026,
+      "weekNumber": 12,
+      "daysProcessed": 5,
+      "slotsPerDay": 10,
+      "totalSlots": 50
+    },
+    {
+      "year": 2026,
+      "weekNumber": 13,
+      "daysProcessed": 5,
+      "slotsPerDay": 10,
+      "totalSlots": 50
+    }
+  ]
+}
+```
+
+---
+
+## 2. GET /api/week-days - Días disponibles formateados
+
+Devuelve los días con disponibilidad en dalu-capacity como texto en español con el número del mes. Útil para mostrar al usuario qué días puede reservar en una semana. Solo incluye días que tienen datos en la tabla de capacidad.
+
+**week** (query, requerido): `actual`, `current`, `siguiente` o `next`
+
+```bash
+# Semana actual
+curl "https://YOUR_API_URL/api/week-days?week=actual"
+```
+
+```bash
+# Semana siguiente
+curl "https://YOUR_API_URL/api/week-days?week=siguiente"
+```
+
+```bash
+# Alternativas en inglés
+curl "https://YOUR_API_URL/api/week-days?week=current"
+curl "https://YOUR_API_URL/api/week-days?week=next"
+```
+
+**Respuesta 200:**
+```json
+{
+  "week": "siguiente",
+  "year": 2026,
+  "weekNumber": 12,
+  "days": "Martes 17, Miércoles 18, Jueves 19, Viernes 20, Sábado 21"
+}
+```
+
+Si no hay capacidad para ningún día, `days` será una cadena vacía.
+
+**400** si `week` es inválido o falta:
+```json
+{
+  "error": "Bad request",
+  "message": "week debe ser \"actual\", \"current\", \"siguiente\" o \"next\""
+}
+```
+
+---
+
+## 3. GET /api/availability - Consultar disponibilidad
+
+Lee solo de dalu-capacity. Con `service` calcula `canStartBooking` según duración del servicio.
+
+**service** (opcional): uñas, pedicura, pestañas, tinte, corte  
+**nailsTechnique** (requerido cuando service=uñas): gel, softgel, acrilico
+
+### Uñas con acrílico (3h)
+```bash
+curl "https://YOUR_API_URL/api/availability?day=tuesday&service=uñas&nailsTechnique=acrilico&year=2026&weekNumber=5"
+```
+
+### Uñas con gel (2h)
+```bash
+curl "https://YOUR_API_URL/api/availability?day=tuesday&service=uñas&nailsTechnique=gel&year=2026&weekNumber=5"
+```
+
+### Pedicura (2h), pestañas (3h), tinte (1h) o corte (1h)
+```bash
+curl "https://YOUR_API_URL/api/availability?day=tuesday&service=pedicura&year=2026&weekNumber=5"
+```
+
+### Sin servicio (capacidad simple)
+```bash
+curl "https://YOUR_API_URL/api/availability?day=tuesday&year=2026&weekNumber=5"
+```
+
+### Todos los días de la semana
+```bash
+curl "https://YOUR_API_URL/api/availability?service=uñas&nailsTechnique=acrilico&year=2026&weekNumber=5"
+```
+
+**Respuesta 200 (día específico con service):**
+```json
+{
+  "day": "tuesday",
+  "service": "uñas",
+  "nailsTechnique": "acrilico",
+  "year": 2026,
+  "weekNumber": 5,
+  "slots": [
+    { "slot": 11, "capacityTotal": 2, "capacityAvailable": 2, "canStartBooking": true },
+    { "slot": 12, "capacityTotal": 2, "capacityAvailable": 2, "canStartBooking": true },
+    { "slot": 17, "capacityTotal": 2, "capacityAvailable": 1, "canStartBooking": false }
+  ],
+  "availableStartSlots": "11:00, 12:00, 14:00"
+}
+```
+
+- **canStartBooking**: true si hay capacidad en el slot y los siguientes (según duración del servicio)
+- **availableStartSlots**: slots donde puede iniciar una cita del servicio indicado
+
+Días válidos: tuesday, wednesday, thursday, friday, saturday.
+
+---
+
+## 4. PUT /api/bookings - Crear reserva
+
+Bloquea múltiples slots consecutivos según la duración del servicio. Sin asignación de técnica.
+
+| Servicio  | nailsTechnique | Duración | Slots bloqueados (ej. inicio 11) |
+|-----------|----------------|----------|----------------------------------|
+| uñas      | acrilico       | 3h       | 11, 12, 13                       |
+| uñas      | gel / softgel  | 2h       | 11, 12                           |
+| pestañas  | —              | 3h       | 11, 12, 13                       |
+| pedicura  | —              | 2h       | 11, 12                           |
+| tinte     | —              | 1h       | 11                                |
+| corte     | —              | 1h       | 11                                |
+
+**service**: uñas, pedicura, pestañas, tinte, corte  
+**nailsTechnique** (requerido cuando service=uñas): gel, softgel, acrilico
+
+```bash
+# Uñas con acrílico
+curl -X PUT https://YOUR_API_URL/api/bookings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "day": "tuesday",
     "slot": 11,
-    "service": "acrilico",
+    "service": "uñas",
+    "nailsTechnique": "acrilico",
+    "customerName": "Ana",
+    "customerInstagram": "@ana",
+    "phoneNumber": "+52 55 1234 5678"
+  }'
+```
+
+```bash
+# Pedicura (sin nailsTechnique)
+curl -X PUT https://YOUR_API_URL/api/bookings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "day": "tuesday",
+    "slot": 14,
+    "service": "pedicura",
+    "customerName": "María",
+    "phoneNumber": "+52 55 9999 0000"
+  }'
+```
+
+**Respuesta 201:**
+```json
+{
+  "message": "Booking created successfully",
+  "booking": {
+    "bookingId": "uuid-...",
+    "day": "tuesday",
+    "slotStart": 11,
+    "slotsBlocked": [11, 12, 13],
+    "service": "uñas",
+    "nailsTechnique": "acrilico",
+    "durationHours": 3,
     "status": "CONFIRMED",
-    "technicianId": "tech_1",
-    "technicianName": "Tania",
-    "updatedAt": "..."
+    "customerName": "Ana",
+    "customerInstagram": "@ana",
+    "phoneNumber": "+52 55 1234 5678",
+    "createdAt": "2026-02-21T15:30:00-06:00"
+  },
+  "availability": {
+    "day": "tuesday",
+    "availableStartSlots": "12:00, 14:00, 15:00, 16:00"
   }
 }
 ```
 
-**409** si la técnica ya no tiene ese slot o el booking ya fue asignado.
-
-### Con week/year explícitos
-```bash
-curl -X PUT https://YOUR_API_URL/api/bookings \
-  -H "Content-Type: application/json" \
-  -d '{
-    "day": "monday",
-    "slot": 12,
-    "service": "acrilico",
-    "customerName": "Test",
-    "year": 2026,
-    "weekNumber": 5
-  }'
+**409** si alguno de los slots requeridos no tiene disponibilidad:
+```json
+{
+  "error": "No capacity",
+  "message": "Not enough capacity for acrilico at 17. Required slots 17,18,19 - slot 19 does not exist."
+}
 ```
+
+Usa siempre la semana actual (America/Mexico_City).
 
 ---
 
@@ -337,5 +237,5 @@ curl -X PUT https://YOUR_API_URL/api/bookings \
 | Código | Causa |
 |--------|-------|
 | 400 | Payload inválido, día/slot/service incorrecto |
-| 404 | No hay schedules para ese día/semana |
-| 409 | Slot sin capacidad disponible (técnicas todas ocupadas) |
+| 404 | No hay capacidad (resetear semana primero) |
+| 409 | No hay capacidad suficiente en los slots del servicio |

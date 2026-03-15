@@ -1,9 +1,16 @@
+/**
+ * Bookings Lambda - Fixed weekly capacity (NO technicians).
+ * Blocks multiple consecutive slots based on service duration.
+ * Same flow as routes/bookings.js
+ */
+
 import capacityRepo from '../../repositories/capacityRepo.js';
 import bookingsRepo from '../../repositories/bookingsRepo.js';
 import { sendBookingToGoogleSheets } from '../../services/googleSheetsWebhook.js';
-import { getCurrentWeekMexico, getMonthAndDayFromWeek } from '../../utils/week.js';
+import { getBookingWeekMexico, getWeekOffsetMexico, getMonthAndDayFromWeek } from '../../utils/week.js';
+import { getServiceDuration, buildBlockedSlots } from '../../utils/serviceDurations.js';
 import { normalizeDay } from '../../utils/dayMapping.js';
-import { bookingSchema } from '../../validators/scheduleValidators.js';
+import { bookingFixedSchema } from '../../validators/scheduleValidators.js';
 
 const json = (statusCode, data) => ({
   statusCode,
@@ -27,7 +34,7 @@ function parseBody(event) {
 }
 
 function normalizeSlot(slot) {
-  if (typeof slot === 'number') return slot; 
+  if (typeof slot === 'number') return slot;
   if (typeof slot === 'string') {
     const m = String(slot).match(/^(\d{1,2})/);
     if (m) return parseInt(m[1], 10);
@@ -37,101 +44,104 @@ function normalizeSlot(slot) {
   return slot;
 }
 
-/**
- * Pre-reserve flow:
- * 1) Decrement capacityAvailable atomically (fails 409 if no capacity)
- * 2) Create booking with status PENDING_ASSIGNMENT, technicianId null
- * Does NOT touch dalu-schedules.
- */
 export const handler = async (event) => {
   try {
     const body = parseBody(event);
-
     if (body.slot !== undefined) body.slot = normalizeSlot(body.slot);
     if (body.day) body.day = normalizeDay(body.day) ?? body.day;
 
-    const parsed = bookingSchema.parse(body);
-    const { day, slot, service, customerName, customerInstagram, phoneNumber } = parsed;
-    const { year, weekNumber } =
-      parsed.year && parsed.weekNumber
-        ? { year: parsed.year, weekNumber: parsed.weekNumber }
-        : getCurrentWeekMexico();
+    const parsed = bookingFixedSchema.parse(body);
+    const { day, slot, service, nailsTechnique, week: qWeek, customerName, customerInstagram, phoneNumber } = parsed;
+    let year, weekNumber;
+    if (qWeek && (qWeek === 'siguiente' || qWeek === 'next')) {
+      ({ year, weekNumber } = getWeekOffsetMexico(1));
+    } else if (qWeek && (qWeek === 'actual' || qWeek === 'current')) {
+      ({ year, weekNumber } = getWeekOffsetMexico(0));
+    } else {
+      ({ year, weekNumber } = getBookingWeekMexico());
+    }
 
-    const { month, dayOfMonth } = getMonthAndDayFromWeek(year, weekNumber, day);
-
-    const slotCapacity = await capacityRepo.getSlotCapacity(year, weekNumber, day, slot);
-    if (!slotCapacity) {
-      return json(404, {
-        error: 'Not found',
-        message: `Slot ${slot} has no capacity for ${day} (week ${weekNumber}). Configure schedules first.`,
+    const durationHours = getServiceDuration(service, nailsTechnique);
+    if (!durationHours) {
+      return json(400, {
+        error: 'Invalid service',
+        message: `Unknown service or missing nailsTechnique. Valid: uñas (requires nailsTechnique: gel|softgel|acrilico), pedicura, pestañas, tinte, corte.`,
       });
     }
 
-    if ((slotCapacity.capacityAvailable ?? 0) <= 0) {
-      return json(409, {
-        error: 'No capacity',
-        message: `Slot ${slot} has no available capacity for ${day}.`,
-      });
-    }
+    const slotsBlocked = buildBlockedSlots(slot, durationHours);
 
-    try {
-      await capacityRepo.decrementAvailableAtomically(year, weekNumber, day, slot);
-    } catch (err) {
-      if (err.code === 'CONFLICT' || err.statusCode === 409) {
-        return json(409, {
-          error: 'No capacity',
-          message: `Slot ${slot} is fully booked for ${day}.`,
+    for (const s of slotsBlocked) {
+      const cap = await capacityRepo.getSlotCapacity(year, weekNumber, day, s);
+      if (!cap) {
+        return json(404, {
+          error: 'Not found',
+          message: `Slot ${s} has no capacity for ${day}. Reset week first.`,
         });
       }
-      throw err;
+      if ((cap.capacityAvailable ?? 0) <= 0) {
+        return json(409, {
+          error: 'No capacity',
+          message: `Not enough capacity for ${service} at ${slot}. Required slots ${slotsBlocked.join(',')} - slot ${s} has no availability.`,
+        });
+      }
     }
 
-    const booking = await bookingsRepo.createPreReserveBooking({
+    const capacityTransactItems = capacityRepo.buildDecrementTransactItems(year, weekNumber, day, slotsBlocked);
+
+    const booking = await bookingsRepo.createBookingWithCapacityDecrement({
       year,
-      month,
-      dayOfMonth,
       weekNumber,
       day,
-      slotHour: slot,
+      slotStart: slot,
+      slotsBlocked,
       service,
-      role: parsed.role,
+      nailsTechnique: nailsTechnique ?? null,
+      durationHours,
       customerName: customerName ?? null,
       customerInstagram: customerInstagram ?? null,
       phoneNumber: phoneNumber ?? null,
+      capacityTransactItems,
     });
 
-    await sendBookingToGoogleSheets(booking,year,day,month,dayOfMonth);
+    const { month, dayOfMonth } = getMonthAndDayFromWeek(year, weekNumber, day);
 
+
+
+    await sendBookingToGoogleSheets(booking, year, day, month, dayOfMonth);
     const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day);
-    const slots = capacityItems.map((item) => ({
-      slot: item.slot,
-      capacityTotal: item.capacityTotal ?? 0,
-      capacityAvailable: item.capacityAvailable ?? 0,
-    }));
-    const availableSlotsArr = slots.filter((s) => s.capacityAvailable > 0).map((s) => s.slot);
-    const availableSlots = availableSlotsArr.join(',');
-    const bookedSlots = slots.filter((s) => s.capacityAvailable < s.capacityTotal).map((s) => s.slot);
+    const slotsWithCanStart = capacityItems.map((item, idx) => {
+      let canStart = (item.capacityAvailable ?? 0) > 0;
+      if (durationHours > 0) {
+        for (let i = 0; i < durationHours; i++) {
+          const next = capacityItems[idx + i];
+          if (!next || (next.capacityAvailable ?? 0) <= 0) {
+            canStart = false;
+            break;
+          }
+        }
+      }
+      return { ...item, canStartBooking: canStart };
+    });
+    const availableStartSlots = slotsWithCanStart.filter((s) => s.canStartBooking).map((s) => s.slot);
 
     return json(201, {
-      message: 'Booking created successfully (pending technician assignment)',
+      message: 'Booking created successfully',
       booking: {
         bookingId: booking.bookingId,
         day: booking.day,
-        slot: booking.slotHour,
+        slotStart: booking.slotStart,
+        slotsBlocked: booking.slotsBlocked,
         service: booking.service,
+        nailsTechnique: booking.nailsTechnique ?? null,
+        durationHours: booking.durationHours,
         status: booking.status,
-        technicianId: booking.technicianId ?? null,
-        technicianName: booking.technicianName ?? null,
         customerName: booking.customerName,
         customerInstagram: booking.customerInstagram,
         phoneNumber: booking.phoneNumber ?? null,
         createdAt: booking.createdAt,
       },
-      availability: {
-        day,
-        availableSlots,
-        bookedSlots,
-      },
+      availability: { day, availableStartSlots },
     });
   } catch (error) {
     console.error('bookings PUT handler error:', error);

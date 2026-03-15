@@ -17,7 +17,8 @@ const GOOGLE_SHEETS_SECRET = process.env.GOOGLE_SHEETS_SECRET;
  * @param {number} booking.weekNumber
  * @param {string} booking.day
  * @param {number} booking.slotHour
- * @param {string} booking.service
+ * @param {string} booking.serviceName
+ * @param {string} [booking.nailsTechnique]
  * @param {string} [booking.role]
  * @param {string} [booking.customerName]
  * @param {string} [booking.customerInstagram]
@@ -40,21 +41,25 @@ export async function sendBookingToGoogleSheets(booking,year,day,month,dayOfMont
         Mes: month,
         Dia: dayOfMonth,
         Dia_semana: toSpanishDay(day),
-        Hora_inicio: booking.slotHour.toString()+":00",
+        Hora_inicio: (booking.slotStart ?? booking.slotHour ?? 0).toString() + ":00",
         Fecha_hora_reserva: booking.createdAt,
         Usuario_instagram: booking.customerInstagram,
         Nombre_usuario: booking.customerName,
         Telefono: booking.phoneNumber ?? null,
-        Id_tecnica: "Por asignar",
+        id_tecnica: "Por asignar",
         Nombre_tecnica: "Por asignar",
         Servicio: booking.service,
+        Tecnica_uñas: booking.nailsTechnique ?? null,
+        //Duracion_horas: booking.durationHours ?? null,
+        //Slots_bloqueados: booking.slotsBlocked ? booking.slotsBlocked.join(',') : null,
         Estatus: "Confirmada - pendiente de asignación",
-        Origen: "Instagram",
+        Origen: "Instagram - Bot",
         Monto_total: 0,
-        Nota: "Cita pre-reservada por Instagram"
+        Nota: "Validar Deposito y Confirmar Asignación"
       },
     ],
   };
+  console.log('payloadToSheets', payload);
 
   try {
     const response = await fetch(WEBHOOK_URL, {

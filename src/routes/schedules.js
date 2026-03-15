@@ -6,178 +6,67 @@ import {
   createScheduleSchema,
   updateTechnicianScheduleSchema,
   technicianScheduleQuerySchema,
+  resetWeekSchema,
 } from '../validators/scheduleValidators.js';
-import { getCurrentWeekMexico } from '../utils/week.js';
+import { getCurrentWeekMexico, getWeekOffsetMexico } from '../utils/week.js';
 import { normalizeDay } from '../utils/dayMapping.js';
+
+function formatSlotsAsHhMm(slots) {
+  return (slots ?? []).map((s) => `${String(s).padStart(2, '0')}:00`).join(',');
+}
 
 const router = express.Router();
 
-router.get('/technician', async (req, res, next) => {
+// --- NEW: Fixed weekly capacity (admin-managed, NO technicians) ---
+// Resetea la semana actual y crea capacidad para las dos semanas siguientes (12 y 13).
+router.post('/reset-week', async (req, res, next) => {
   try {
-    const query = { ...req.query };
-    if (query.day) query.day = normalizeDay(query.day) ?? query.day;
+    resetWeekSchema.parse(req.body ?? {});
+    const current = getCurrentWeekMexico();
+    const week1 = getWeekOffsetMexico(1); // siguiente
+    const week2 = getWeekOffsetMexico(2); // siguiente+1
 
-    const parsed = technicianScheduleQuerySchema.parse(query);
-    const { technicianId, day } = parsed;
-    const { year, weekNumber } =
-      parsed.year != null && parsed.weekNumber != null
-        ? { year: parsed.year, weekNumber: parsed.weekNumber }
-        : getCurrentWeekMexico();
-
-    if (day) {
-      const schedule = await schedulesRepo.getScheduleForTechnicianDay(year, weekNumber, day, technicianId);
-      if (!schedule) {
-        return res.status(404).json({
-          error: 'Not found',
-          message: `No schedule found for technician ${technicianId} on ${day} (week ${weekNumber}).`,
-        });
-      }
-      return res.json({
-        year,
-        weekNumber,
-        technicianId,
-        technicianName: schedule.technicianName,
-        schedule: [
-          {
-            day: schedule.day,
-            slots: schedule.slots ?? [],
-            role: schedule.role,
-            services: schedule.services ?? [],
-          },
-        ],
-      });
-    }
-
-    const schedule = await schedulesRepo.getTechnicianScheduleForWeek(year, weekNumber, technicianId);
-    if (schedule.length === 0) {
-      return res.status(404).json({
-        error: 'Not found',
-        message: `No schedule found for technician ${technicianId} (week ${weekNumber}, year ${year}).`,
-      });
-    }
+    await capacityRepo.deleteWeek([current, week1, week2]);
+    // Ejecutar ambas semanas en paralelo
+    const [summary1, summary2] = await Promise.all([
+      capacityRepo.resetWeek(week1.year, week1.weekNumber),
+      capacityRepo.resetWeek(week2.year, week2.weekNumber),
+    ]);
 
     res.json({
-      year,
-      weekNumber,
-      technicianId,
-      technicianName: schedule[0]?.technicianName,
-      schedule,
+      message: 'Week capacity reset successfully (2 weeks)',
+      weeksCreated: [
+        { year: week1.year, weekNumber: week1.weekNumber, ...summary1 },
+        { year: week2.year, weekNumber: week2.weekNumber, ...summary2 },
+      ],
     });
   } catch (error) {
+    console.error('reset-week error:', error?.name, error?.message, error?.$metadata ?? error?.code);
     next(error);
   }
 });
 
-router.put('/technician', async (req, res, next) => {
-  try {
-    const body = { ...req.body };
-    if (body.day) body.day = normalizeDay(body.day) ?? body.day;
-
-    const parsed = updateTechnicianScheduleSchema.parse(body);
-    const { technicianId, day, slots } = parsed;
-    const { year, weekNumber } =
-      parsed.year != null && parsed.weekNumber != null
-        ? { year: parsed.year, weekNumber: parsed.weekNumber }
-        : getCurrentWeekMexico();
-
-    const oldSchedule = await schedulesRepo.getScheduleForTechnicianDay(year, weekNumber, day, technicianId);
-    const oldSlots = oldSchedule?.slots ?? [];
-    const newSlots = [...slots].sort((a, b) => a - b);
-
-    const added = newSlots.filter((s) => !oldSlots.includes(s));
-    const removed = oldSlots.filter((s) => !newSlots.includes(s));
-
-    if (removed.length > 0) {
-      const slotsOcupados = await bookingsRepo.getConfirmedSlotsByTechnicianDay(year, weekNumber, day, technicianId);
-      const blocked = removed.filter((s) => slotsOcupados.has(s));
-      if (blocked.length > 0) {
-        return res.status(409).json({
-          error: 'Conflict',
-          message: 'Cannot remove slots that have confirmed bookings.',
-          blockedSlots: blocked,
-        });
-      }
-    }
-
-    await capacityRepo.batchAdjustFromDelta(year, weekNumber, day, added, removed);
-
-    await schedulesRepo.upsertTechnicianDay({
-      year,
-      weekNumber,
-      day,
-      technicianId,
-      technicianName: oldSchedule?.technicianName,
-      role: oldSchedule?.role,
-      services: oldSchedule?.services ?? [],
-      slots: newSlots,
-    });
-
-    res.json({
-      message: 'Schedule updated',
-      day,
-      technicianId,
-      oldSlots,
-      newSlots,
-      added,
-      removed,
-    });
-  } catch (error) {
-    next(error);
-  }
+// --- DEPRECATED: Technician-based routes (fixed capacity model - no technicians) ---
+router.get('/technician', (req, res) => {
+  res.status(410).json({
+    error: 'Gone',
+    message: 'GET /api/schedules/technician is deprecated. Use POST /api/schedules/reset-week for fixed capacity.',
+  });
 });
 
-router.post('/', async (req, res, next) => {
-  try {
-    const body = req.body;
+router.put('/technician', (req, res) => {
+  res.status(410).json({
+    error: 'Gone',
+    message: 'PUT /api/schedules/technician is deprecated. Use POST /api/schedules/reset-week for fixed capacity.',
+  });
+});
 
-    if (body.schedules && !body.technician) {
-      return res.status(400).json({
-        error: 'Invalid payload',
-        message:
-          'Legacy format no longer supported. Use new format with year, weekNumber, technician, and availability.',
-      });
-    }
-
-    const parsed = createScheduleSchema.parse(body);
-    const { year, weekNumber, technician } = parsed;
-
-    for (const { day, slots } of parsed.availability) {
-      const oldSchedule = await schedulesRepo.getScheduleForTechnicianDay(year, weekNumber, day, technician.id);
-      const oldSlots = oldSchedule?.slots ?? [];
-      const newSlots = [...slots].sort((a, b) => a - b);
-
-      const added = newSlots.filter((s) => !oldSlots.includes(s));
-      const removed = oldSlots.filter((s) => !newSlots.includes(s));
-
-      await capacityRepo.batchAdjustFromDelta(year, weekNumber, day, added, removed);
-      await schedulesRepo.upsertTechnicianDay({
-        year,
-        weekNumber,
-        day,
-        technicianId: technician.id,
-        technicianName: technician.name,
-        role: technician.role,
-        services: technician.services,
-        slots: newSlots,
-      });
-    }
-
-    const results = parsed.availability.map(({ day, slots }) => ({
-      day,
-      slots: [...slots].sort((a, b) => a - b),
-      technicianId: technician.id,
-    }));
-
-    res.json({
-      message: 'Schedules updated successfully',
-      year,
-      weekNumber,
-      technicianId: technician.id,
-      schedules: results,
-    });
-  } catch (error) {
-    next(error);
-  }
+// DEPRECATED: POST / - use reset-week for fixed capacity
+router.post('/', (req, res) => {
+  res.status(410).json({
+    error: 'Gone',
+    message: 'POST /api/schedules is deprecated. Use POST /api/schedules/reset-week for fixed capacity (no technicians).',
+  });
 });
 
 export default router;

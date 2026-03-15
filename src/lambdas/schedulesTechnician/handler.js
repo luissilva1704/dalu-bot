@@ -17,6 +17,10 @@ const json = (statusCode, data) => ({
   body: JSON.stringify(data),
 });
 
+function formatSlotsAsHhMm(slots) {
+  return (slots ?? []).map((s) => `${String(s).padStart(2, '0')}:00`).join(',');
+}
+
 function parseBody(event) {
   if (!event?.body) return {};
   if (typeof event.body === 'string') {
@@ -75,7 +79,12 @@ async function handleGet(event) {
         technicianId,
         technicianName: schedule.technicianName,
         schedule: [
-          { day: schedule.day, slots: schedule.slots ?? [], role: schedule.role, services: schedule.services ?? [] },
+          {
+            day: schedule.day,
+            slots: formatSlotsAsHhMm(schedule.slots),
+            role: schedule.role,
+            services: schedule.services ?? [],
+          },
         ],
       });
     }
@@ -88,12 +97,19 @@ async function handleGet(event) {
       });
     }
 
+    const scheduleFormatted = schedule.map((s) => ({
+      day: s.day,
+      slots: formatSlotsAsHhMm(s.slots),
+      role: s.role,
+      services: s.services ?? [],
+    }));
+
     return json(200, {
       year,
       weekNumber,
       technicianId,
       technicianName: schedule[0]?.technicianName,
-      schedule,
+      schedule: scheduleFormatted,
     });
   } catch (error) {
     console.error('schedulesTechnician GET handler error:', error);

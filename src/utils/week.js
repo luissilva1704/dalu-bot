@@ -5,6 +5,26 @@
  */
 
 /**
+ * Get current date/time as ISO string in America/Mexico_City timezone (GMT-6)
+ */
+export function getMexicoCityNowISO() {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type) => parts.find((p) => p.type === type)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}-06:00`;
+}
+
+/**
  * Get the current date in Mexico City timezone
  * Returns { year, month, day } as local date parts
  */
@@ -40,9 +60,32 @@ function getISOWeekNumber(year, month, day) {
 const DAY_NAME_TO_ISO = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7 };
 
 const MONTH_NAMES_ES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
+
+const ENGLISH_TO_SPANISH = {
+  monday: 'Lunes',
+  tuesday: 'Martes',
+  wednesday: 'Miércoles',
+  thursday: 'Jueves',
+  friday: 'Viernes',
+  saturday: 'Sábado',
+};
+
+/**
+ * Formatea una lista de días con su número del mes en español.
+ * Ej: formatWeekDaysString(2025, 12, ['tuesday', 'wednesday']) -> "Martes 17, Miércoles 18"
+ */
+export function formatWeekDaysString(year, weekNumber, dayNames) {
+  return (dayNames ?? [])
+    .map((day) => {
+      const { dayOfMonth } = getMonthAndDayFromWeek(year, weekNumber, day);
+      const name = ENGLISH_TO_SPANISH[String(day).toLowerCase()] ?? day;
+      return `${name} ${dayOfMonth}`;
+    })
+    .join(', ');
+}
 
 /**
  * Get month name (Spanish) and day of month (1-31) from year, ISO week number, and day name
@@ -67,6 +110,72 @@ export function getCurrentWeekMexico() {
   const { year, month, day } = getMexicoCityDate();
   const weekNumber = getISOWeekNumber(year, month, day);
   return { year, weekNumber };
+}
+
+/**
+ * Get the next ISO week and year for America/Mexico_City.
+ * Used by schedules-reset when run on Saturday to prepare the following week.
+ * @returns {{ year: number, weekNumber: number }}
+ */
+export function getNextWeekMexico() {
+  return getWeekOffsetMexico(1);
+}
+
+/**
+ * Get week (year, weekNumber) at offset from current. 0=actual, 1=siguiente, 2=siguiente+1.
+ * @param {number} offset - 0=current, 1=next, 2=next+1
+ */
+export function getWeekOffsetMexico(offset) {
+  const { year, month, day } = getMexicoCityDate();
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + offset * 7);
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  return { year: y, weekNumber: getISOWeekNumber(y, m, d) };
+}
+
+/**
+ * Semana de reservas: sábado/domingo → siguiente semana; lunes–viernes → semana actual.
+ * Tras reset el sábado, los clientes ven la semana 12 (la preparada).
+ * @returns {{ year: number, weekNumber: number }}
+ */
+export function getBookingWeekMexico() {
+  const { year, month, day } = getMexicoCityDate();
+  const date = new Date(year, month - 1, day);
+  const dayOfWeek = date.getDay(); // 0=Sun, 6=Sat
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  return isWeekend ? getNextWeekMexico() : getCurrentWeekMexico();
+}
+
+/**
+ * Get date { year, month, day } for a given (year, weekNumber, dayName)
+ */
+export function getDateForWeekDay(year, weekNumber, dayName) {
+  const dayOfWeek = DAY_NAME_TO_ISO[String(dayName).toLowerCase()] ?? 1;
+  const jan4 = new Date(year, 0, 4);
+  const dayOfJan4 = jan4.getDay() || 7;
+  const mondayOfWeek1 = new Date(year, 0, 4 - dayOfJan4 + 1);
+  const target = new Date(mondayOfWeek1);
+  target.setDate(mondayOfWeek1.getDate() + (weekNumber - 1) * 7 + (dayOfWeek - 1));
+  return {
+    year: target.getFullYear(),
+    month: target.getMonth() + 1,
+    day: target.getDate(),
+  };
+}
+
+/**
+ * Returns true if (year, weekNumber, dayName) is before today (America/Mexico_City)
+ */
+export function isDayBeforeToday(year, weekNumber, dayName) {
+  const today = getMexicoCityDate();
+  const dayDate = getDateForWeekDay(year, weekNumber, dayName);
+  if (dayDate.year < today.year) return true;
+  if (dayDate.year > today.year) return false;
+  if (dayDate.month < today.month) return true;
+  if (dayDate.month > today.month) return false;
+  return dayDate.day < today.day;
 }
 
 /**
