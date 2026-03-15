@@ -6,7 +6,7 @@
  */
 
 import capacityRepo from '../../repositories/capacityRepo.js';
-import { getBookingWeekMexico, getWeekOffsetMexico, isDayBeforeToday } from '../../utils/week.js';
+import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, isDayBeforeToday } from '../../utils/week.js';
 import { FIXED_DAYS } from '../../utils/fixedSchedule.js';
 import { getServiceDuration } from '../../utils/serviceDurations.js';
 import { normalizeDay } from '../../utils/dayMapping.js';
@@ -44,9 +44,11 @@ export const handler = async (event) => {
       year = qYear;
       weekNumber = qWeek;
     } else if (qWeekParam && (qWeekParam === 'siguiente' || qWeekParam === 'next')) {
-      ({ year, weekNumber } = getWeekOffsetMexico(1));
+      ({ year, weekNumber } = getAvailabilityWeekOffsetMexico(1));
     } else if (qWeekParam && (qWeekParam === 'actual' || qWeekParam === 'current')) {
-      ({ year, weekNumber } = getWeekOffsetMexico(0));
+      // Sábado/domingo → siguiente semana (tras reset a las 15:00, semana actual ya no tiene datos).
+      // Lunes–viernes → semana actual.
+      ({ year, weekNumber } = getBookingWeekMexico());
     } else {
       ({ year, weekNumber } = getBookingWeekMexico());
     }

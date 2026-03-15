@@ -123,6 +123,8 @@ export function getNextWeekMexico() {
 
 /**
  * Get week (year, weekNumber) at offset from current. 0=actual, 1=siguiente, 2=siguiente+1.
+ * Calendario puro: offset 1 = siguiente semana del calendario.
+ * Para disponibilidad/bookings (considera reset sábado 15:00) usa getAvailabilityWeekOffsetMexico.
  * @param {number} offset - 0=current, 1=next, 2=next+1
  */
 export function getWeekOffsetMexico(offset) {
@@ -136,16 +138,72 @@ export function getWeekOffsetMexico(offset) {
 }
 
 /**
- * Semana de reservas: sábado/domingo → siguiente semana; lunes–viernes → semana actual.
- * Tras reset el sábado, los clientes ven la semana 12 (la preparada).
+ * True si es sábado 15:00+ o domingo (el reset ya corrió).
+ */
+function isAfterSaturdayReset() {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type) => parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10);
+  const hour = get('hour');
+  const date = new Date(get('year'), get('month') - 1, get('day'));
+  const dayOfWeek = date.getDay();
+  return (dayOfWeek === 6 && hour >= 15) || dayOfWeek === 0;
+}
+
+/**
+ * Offset de semana para disponibilidad, bookings y week-days.
+ * Considera el reset del sábado 15:00: después del reset, "actual"=12, "siguiente"=13.
+ * @param {number} offset - 0=actual (usa getBookingWeekMexico), 1=siguiente, 2=siguiente+1
+ * @returns {{ year: number, weekNumber: number }}
+ */
+export function getAvailabilityWeekOffsetMexico(offset) {
+  if (offset === 0) return getBookingWeekMexico();
+  const effectiveOffset = offset + (isAfterSaturdayReset() ? 1 : 0);
+  return getWeekOffsetMexico(effectiveOffset);
+}
+
+/**
+ * Semana de reservas para disponibilidad/bookings (America/Mexico_City).
+ * - Lunes–viernes: semana actual
+ * - Sábado antes de las 15:00: semana actual (el cliente aún puede reservar ese sábado)
+ * - Sábado 15:00 en adelante: siguiente semana (reset corrió, solo hay semanas 12/13 en BD)
+ * - Domingo: siguiente semana
  * @returns {{ year: number, weekNumber: number }}
  */
 export function getBookingWeekMexico() {
-  const { year, month, day } = getMexicoCityDate();
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type) => parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10);
+  const year = get('year');
+  const month = get('month');
+  const day = get('day');
+  const hour = get('hour');
   const date = new Date(year, month - 1, day);
   const dayOfWeek = date.getDay(); // 0=Sun, 6=Sat
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  return isWeekend ? getNextWeekMexico() : getCurrentWeekMexico();
+
+  if (dayOfWeek === 6 && hour < 15) {
+    return getCurrentWeekMexico();
+  }
+  if (dayOfWeek === 0 || (dayOfWeek === 6 && hour >= 15)) {
+    return getNextWeekMexico();
+  }
+  return getCurrentWeekMexico();
 }
 
 /**

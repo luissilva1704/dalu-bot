@@ -7,7 +7,7 @@ import express from 'express';
 import capacityRepo from '../repositories/capacityRepo.js';
 import bookingsRepo from '../repositories/bookingsRepo.js';
 import { sendBookingToGoogleSheets } from '../services/googleSheetsWebhook.js';
-import { getBookingWeekMexico, getWeekOffsetMexico, getMonthAndDayFromWeek } from '../utils/week.js';
+import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, getMonthAndDayFromWeek } from '../utils/week.js';
 import { getServiceDuration, buildBlockedSlots } from '../utils/serviceDurations.js';
 import { normalizeDay } from '../utils/dayMapping.js';
 import { bookingFixedSchema } from '../validators/scheduleValidators.js';
@@ -36,9 +36,9 @@ router.put('/', async (req, res, next) => {
     const { day, slot, service, nailsTechnique, week: qWeek, customerName, customerInstagram, phoneNumber } = parsed;
     let year, weekNumber;
     if (qWeek && (qWeek === 'siguiente' || qWeek === 'next')) {
-      ({ year, weekNumber } = getWeekOffsetMexico(1));
+      ({ year, weekNumber } = getAvailabilityWeekOffsetMexico(1));
     } else if (qWeek && (qWeek === 'actual' || qWeek === 'current')) {
-      ({ year, weekNumber } = getWeekOffsetMexico(0));
+      ({ year, weekNumber } = getAvailabilityWeekOffsetMexico(0));
     } else {
       ({ year, weekNumber } = getBookingWeekMexico());
     }
