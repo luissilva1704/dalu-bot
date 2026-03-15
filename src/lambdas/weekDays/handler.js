@@ -6,7 +6,7 @@
  */
 
 import capacityRepo from '../../repositories/capacityRepo.js';
-import { getAvailabilityWeekOffsetMexico, formatWeekDaysString } from '../../utils/week.js';
+import { getAvailabilityWeekOffsetMexico, formatWeekDays } from '../../utils/week.js';
 import { FIXED_DAYS } from '../../utils/fixedSchedule.js';
 
 const json = (statusCode, data) => ({
@@ -43,14 +43,20 @@ export const handler = async (event) => {
       }
     }
 
-    const days = formatWeekDaysString(year, weekNumber, daysWithCapacity);
+    const days = formatWeekDays(year, weekNumber, daysWithCapacity);
+    const daysString = days.join(', ');
 
     return json(200, {
       message: days.length > 0 ? 'Week days fetched successfully' : 'No week days found',
       week: weekParam === 'siguiente' || weekParam === 'next' ? 'siguiente' : 'actual',
       year,
       weekNumber,
-      days,
+      days: daysString,
+      objectDays: days.reduce((acc, day) => {
+        acc[day.split(' ')[0]] = day;
+        return acc;
+      }, {}),
+
     });
   } catch (error) {
     console.error('week-days handler error:', error);

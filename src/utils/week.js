@@ -75,16 +75,15 @@ const ENGLISH_TO_SPANISH = {
 
 /**
  * Formatea una lista de días con su número del mes en español.
- * Ej: formatWeekDaysString(2025, 12, ['tuesday', 'wednesday']) -> "Martes 17, Miércoles 18"
+ * Ej: formatWeekDays(2025, 12, ['tuesday', 'wednesday']) -> "Martes 17, Miércoles 18"
  */
-export function formatWeekDaysString(year, weekNumber, dayNames) {
+export function formatWeekDays(year, weekNumber, dayNames) {
   return (dayNames ?? [])
     .map((day) => {
       const { dayOfMonth } = getMonthAndDayFromWeek(year, weekNumber, day);
       const name = ENGLISH_TO_SPANISH[String(day).toLowerCase()] ?? day;
       return `${name} ${dayOfMonth}`;
     })
-    .join(', ');
 }
 
 /**

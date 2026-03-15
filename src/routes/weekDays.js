@@ -6,7 +6,7 @@
 
 import express from 'express';
 import capacityRepo from '../repositories/capacityRepo.js';
-import { getAvailabilityWeekOffsetMexico, formatWeekDaysString } from '../utils/week.js';
+import { getAvailabilityWeekOffsetMexico, formatWeekDays } from '../utils/week.js';
 import { FIXED_DAYS } from '../utils/fixedSchedule.js';
 
 const router = express.Router();
@@ -34,13 +34,13 @@ router.get('/', async (req, res, next) => {
       }
     }
 
-    const days = formatWeekDaysString(year, weekNumber, daysWithCapacity);
-
+    const days = formatWeekDays(year, weekNumber, daysWithCapacity);
+    const daysString = days.join(', ');
     res.json({
       week: weekParam === 'siguiente' || weekParam === 'next' ? 'siguiente' : 'actual',
       year,
       weekNumber,
-      days,
+      days: daysString,
     });
   } catch (error) {
     next(error);

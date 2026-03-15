@@ -90,8 +90,8 @@ export const handler = async (event) => {
 
       const availableStartSlotsArr =
         durationHours > 0
-          ? slots.filter((s) => s.canStartBooking).map((s) => s.slot)
-          : slots.filter((s) => (s.capacityAvailable ?? 0) > 0).map((s) => s.slot);
+          ? slots.filter((s) => s.canStartBooking && s.slot !== 19 && s.slot !== 20).map((s) => s.slot)
+          : slots.filter((s) => (s.capacityAvailable ?? 0) > 0 && s.slot !== 19 && s.slot !== 20).map((s) => s.slot);
       const availableStartSlots = availableStartSlotsArr.map((s) => `${s}:00`).join(', ');
 
       return json(200, {
@@ -125,8 +125,8 @@ export const handler = async (event) => {
 
       const availableStartSlotsArr =
         durationHours > 0
-          ? slots.filter((s) => s.canStartBooking).map((s) => s.slot)
-          : slots.filter((s) => (s.capacityAvailable ?? 0) > 0).map((s) => s.slot);
+          ? slots.filter((s) => s.canStartBooking && s.slot !== 19 && s.slot !== 20).map((s) => s.slot)
+          : slots.filter((s) => (s.capacityAvailable ?? 0) > 0 && s.slot !== 19 && s.slot !== 20).map((s) => s.slot);
       const availableStartSlots = availableStartSlotsArr.map((s) => `${s}:00`).join(', ');
 
       availability.push({ day, slots, availableStartSlots });
