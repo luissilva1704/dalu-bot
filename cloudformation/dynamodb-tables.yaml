@@ -85,7 +85,7 @@ Resources:
         - Key: Environment
           Value: Production
 
-  # Capacity: pk = Y#year#W#week#D#day, sk = S#slot (aggregated, no technician)
+  # Capacity: pk = Y#year#W#week#D#day, sk = G#serviceGroup#S#slot (independent by nails|face_hair|pedicure|makeup)
   CapacityTable:
     Type: AWS::DynamoDB::Table
     Properties:

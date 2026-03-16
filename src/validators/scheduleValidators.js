@@ -53,9 +53,10 @@ export const createScheduleSchema = z.object({
 // --- Reset week (fixed capacity, no technicians) - sin parámetros, usa semana actual ---
 export const resetWeekSchema = z.object({});
 
-// --- Availability query: service = uñas|pedicura|pestañas|tinte|corte ---
+// --- Availability query: service REQUERIDO ---
+// service = uñas|pedicura|pestañas|cejas|cortes|tintes|maquillaje
 // Cuando service=uñas, nailsTechnique (gel|softgel|acrilico) es requerido
-const AVAILABILITY_SERVICES = ['uñas', 'unas', 'pedicura', 'pestañas', 'pestanas', 'tinte', 'corte'];
+const AVAILABILITY_SERVICES = ['uñas', 'unas', 'pedicura', 'pestañas', 'pestanas', 'cejas', 'cortes', 'tintes', 'tinte', 'maquillaje'];
 
 const NAILS_TECHNIQUES_AVAIL = ['gel', 'softgel', 'acrilico'];
 const fixedDaySchema = z.enum(['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], {
@@ -83,7 +84,28 @@ export const availabilityQuerySchema = z
         message: `week debe ser "${WEEK_VALUES_AVAIL.join('", "')}"`,
       })
       .optional(),
-    service: z.enum(AVAILABILITY_SERVICES).optional(),
+    service: z.enum(AVAILABILITY_SERVICES),
+    nailsTechnique: z.enum(NAILS_TECHNIQUES_AVAIL).optional(),
+  })
+  .refine(
+    (data) => {
+      const svc = (data.service ?? '').toLowerCase();
+      if (svc === 'uñas' || svc === 'unas') return !!data.nailsTechnique;
+      return true;
+    },
+    { message: 'nailsTechnique is required when service is uñas', path: ['nailsTechnique'] }
+  );
+
+// --- Week-days query: week + service (días disponibles para ese servicio)
+export const weekDaysQuerySchema = z
+  .object({
+    week: z
+      .string()
+      .transform((v) => (v ?? '').toLowerCase().trim())
+      .refine((v) => ['actual', 'current', 'siguiente', 'next'].includes(v), {
+        message: 'week debe ser "actual", "current", "siguiente" o "next"',
+      }),
+    service: z.enum(AVAILABILITY_SERVICES),
     nailsTechnique: z.enum(NAILS_TECHNIQUES_AVAIL).optional(),
   })
   .refine(
@@ -107,7 +129,7 @@ export const bookingFixedSchema = z
         return SPANISH_DAYS[d] ?? (['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(d) ? d : v);
       })
       .pipe(fixedDaySchema),
-    slot: z.number().int().min(11).max(20),
+    slot: z.number().int().min(11).max(18),
     service: z.enum(AVAILABILITY_SERVICES),
     nailsTechnique: z.enum(NAILS_TECHNIQUES_AVAIL).optional(),
     week: z

@@ -271,13 +271,20 @@ export function bookingPreReserveSk(slotHour, bookingId) {
   return `SLOT#${slotHour}#B#${bookingId}`;
 }
 
-// --- Capacity table (aggregated, no technician) ---
+// --- Capacity table (por serviceGroup: nails, face_hair, pedicure, makeup) ---
+// pk = Y#year#W#week#D#day
+// sk = S#slot#G#serviceGroup  (ej: S#11#G#nails)
+// Permite consultar disponibilidad por grupo de servicio de forma independiente.
 export function capacityPk(year, weekNumber, day) {
   return `Y#${year}#W#${weekNumber}#D#${day}`;
 }
 
-export function capacitySk(slot) {
-  return `S#${slot}`;
+/**
+ * sk con serviceGroup. Formato G#group#S#slot permite Query con begins_with(sk, "G#nails#")
+ * para obtener todos los slots de un grupo en un día.
+ */
+export function capacitySk(slot, serviceGroup) {
+  return `G#${serviceGroup}#S#${slot}`;
 }
 
 // --- Bookings GSI byTechnician (for CONFIRMED bookings) ---

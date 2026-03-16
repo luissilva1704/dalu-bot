@@ -9,6 +9,7 @@ import bookingsRepo from '../../repositories/bookingsRepo.js';
 import { sendBookingToGoogleSheets } from '../../services/googleSheetsWebhook.js';
 import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, getMonthAndDayFromWeek } from '../../utils/week.js';
 import { getServiceDuration, buildBlockedSlots } from '../../utils/serviceDurations.js';
+import { getServiceGroup } from '../../utils/serviceGroups.js';
 import { normalizeDay } from '../../utils/dayMapping.js';
 import { bookingFixedSchema } from '../../validators/scheduleValidators.js';
 
@@ -61,18 +62,26 @@ export const handler = async (event) => {
       ({ year, weekNumber } = getBookingWeekMexico());
     }
 
+    const serviceGroup = getServiceGroup(service, nailsTechnique);
+    if (!serviceGroup) {
+      return json(400, {
+        error: 'Invalid service',
+        message: 'service no válido o falta nailsTechnique cuando service=uñas',
+      });
+    }
+
     const durationHours = getServiceDuration(service, nailsTechnique);
     if (!durationHours) {
       return json(400, {
         error: 'Invalid service',
-        message: `Unknown service or missing nailsTechnique. Valid: uñas (requires nailsTechnique: gel|softgel|acrilico), pedicura, pestañas, tinte, corte.`,
+        message: 'Duración desconocida para el servicio indicado.',
       });
     }
 
     const slotsBlocked = buildBlockedSlots(slot, durationHours);
 
     for (const s of slotsBlocked) {
-      const cap = await capacityRepo.getSlotCapacity(year, weekNumber, day, s);
+      const cap = await capacityRepo.getSlotCapacity(year, weekNumber, day, s, serviceGroup);
       if (!cap) {
         return json(404, {
           error: 'Not found',
@@ -87,7 +96,13 @@ export const handler = async (event) => {
       }
     }
 
-    const capacityTransactItems = capacityRepo.buildDecrementTransactItems(year, weekNumber, day, slotsBlocked);
+    const capacityTransactItems = capacityRepo.buildDecrementTransactItems(
+      year,
+      weekNumber,
+      day,
+      slotsBlocked,
+      serviceGroup
+    );
 
     const booking = await bookingsRepo.createBookingWithCapacityDecrement({
       year,
@@ -97,6 +112,7 @@ export const handler = async (event) => {
       slotsBlocked,
       service,
       nailsTechnique: nailsTechnique ?? null,
+      serviceGroup,
       durationHours,
       customerName: customerName ?? null,
       customerInstagram: customerInstagram ?? null,
@@ -109,7 +125,7 @@ export const handler = async (event) => {
 
 
     await sendBookingToGoogleSheets(booking, year, day, month, dayOfMonth);
-    const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day);
+    const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day, serviceGroup);
     const slotsWithCanStart = capacityItems.map((item, idx) => {
       let canStart = (item.capacityAvailable ?? 0) > 0;
       if (durationHours > 0) {
@@ -134,6 +150,7 @@ export const handler = async (event) => {
         slotsBlocked: booking.slotsBlocked,
         service: booking.service,
         nailsTechnique: booking.nailsTechnique ?? null,
+        serviceGroup: booking.serviceGroup ?? null,
         durationHours: booking.durationHours,
         status: booking.status,
         customerName: booking.customerName,

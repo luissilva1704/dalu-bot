@@ -9,6 +9,7 @@ import capacityRepo from '../../repositories/capacityRepo.js';
 import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, isDayBeforeToday } from '../../utils/week.js';
 import { FIXED_DAYS } from '../../utils/fixedSchedule.js';
 import { getServiceDuration } from '../../utils/serviceDurations.js';
+import { getServiceGroup } from '../../utils/serviceGroups.js';
 import { normalizeDay } from '../../utils/dayMapping.js';
 import { availabilityQuerySchema } from '../../validators/scheduleValidators.js';
 
@@ -53,7 +54,15 @@ export const handler = async (event) => {
       ({ year, weekNumber } = getBookingWeekMexico());
     }
 
-    const durationHours = service ? getServiceDuration(service, nailsTechnique) : 0;
+    const serviceGroup = getServiceGroup(service, nailsTechnique);
+    if (!serviceGroup) {
+      return json(400, {
+        error: 'Invalid service',
+        message: 'service no válido o falta nailsTechnique cuando service=uñas',
+      });
+    }
+
+    const durationHours = getServiceDuration(service, nailsTechnique);
 
     if (qDay) {
       if (isDayBeforeToday(year, weekNumber, qDay)) {
@@ -62,6 +71,7 @@ export const handler = async (event) => {
           day: qDay,
           service: service ?? null,
           nailsTechnique: nailsTechnique ?? null,
+          serviceGroup,
           year,
           weekNumber,
           slots: [],
@@ -69,7 +79,7 @@ export const handler = async (event) => {
         });
       }
 
-      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, qDay);
+      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, qDay, serviceGroup);
 
       if (capacityItems.length === 0) {
         return json(404, {
@@ -99,6 +109,7 @@ export const handler = async (event) => {
         day: qDay,
         service: service ?? null,
         nailsTechnique: nailsTechnique ?? null,
+        serviceGroup,
         year,
         weekNumber,
         slots,
@@ -110,7 +121,7 @@ export const handler = async (event) => {
     for (const day of FIXED_DAYS) {
       if (isDayBeforeToday(year, weekNumber, day)) continue;
 
-      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day);
+      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day, serviceGroup);
       if (capacityItems.length === 0) continue;
 
       const slots = capacityItems.map((item, idx) => ({
@@ -146,6 +157,7 @@ export const handler = async (event) => {
       year,
       service: service ?? null,
       nailsTechnique: nailsTechnique ?? null,
+      serviceGroup,
     });
   } catch (error) {
     console.error('availability handler error:', error);
