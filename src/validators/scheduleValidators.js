@@ -58,7 +58,7 @@ export const resetWeekSchema = z.object({});
 // Cuando service=uñas, nailsTechnique (gel|softgel|acrilico) es requerido
 const AVAILABILITY_SERVICES = ['uñas', 'unas', 'pedicura', 'pestañas', 'pestanas', 'cejas', 'cortes', 'tintes', 'tinte', 'maquillaje'];
 
-const NAILS_TECHNIQUES_AVAIL = ['gel', 'softgel', 'acrilico','Corte_styling', 'Despunte_styling', 'Reestructurante', 'Ampolleta_brillo', 'Tinte_completo', 'Retoque_raiz', 'Baño_color', 'Matiz', 'Cubrimiento_canas'];
+const NAILS_TECHNIQUES_AVAIL = ['gel', 'softgel', 'acrilico','Corte_styling', 'Despunte_styling', 'Tratamiento_hidratante_reestructurante', 'Ampolleta_brillo', 'Tinte_completo', 'Retoque_raiz', 'Baño_color', 'Matiz', 'Cubrimiento_canas'];
 const STYLING = ["Lacio_elegante", "Ondas_suaves_natural", "Brushing_movimiento", "NA"];
 const fixedDaySchema = z.enum(['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], {
   errorMap: () => ({ message: 'Day must be tuesday through saturday' }),
