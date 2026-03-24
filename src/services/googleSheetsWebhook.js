@@ -50,6 +50,7 @@ export async function sendBookingToGoogleSheets(booking,year,day,month,dayOfMont
         Nombre_tecnica: "Por asignar",
         Servicio: booking.service,
         Tecnica: booking.nailsTechnique ?? null,
+        Styling:booking.styling ??null,
         //Duracion_horas: booking.durationHours ?? null,
         //Slots_bloqueados: booking.slotsBlocked ? booking.slotsBlocked.join(',') : null,
         Estatus: "Confirmada - pendiente de asignación",

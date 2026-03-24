@@ -52,7 +52,7 @@ export const handler = async (event) => {
     if (body.day) body.day = normalizeDay(body.day) ?? body.day;
 
     const parsed = bookingFixedSchema.parse(body);
-    const { day, slot, service, nailsTechnique, week: qWeek, customerName, customerInstagram, phoneNumber } = parsed;
+    const { day, slot, service, nailsTechnique, styling, week: qWeek, customerName, customerInstagram, phoneNumber } = parsed;
     let year, weekNumber;
     if (qWeek && (qWeek === 'siguiente' || qWeek === 'next')) {
       ({ year, weekNumber } = getAvailabilityWeekOffsetMexico(1));
@@ -112,6 +112,7 @@ export const handler = async (event) => {
       slotsBlocked,
       service,
       nailsTechnique: nailsTechnique ?? null,
+      styling,
       serviceGroup,
       durationHours,
       customerName: customerName ?? null,
