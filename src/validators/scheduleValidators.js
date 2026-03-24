@@ -59,6 +59,7 @@ export const resetWeekSchema = z.object({});
 const AVAILABILITY_SERVICES = ['uñas', 'unas', 'pedicura', 'pestañas', 'pestanas', 'cejas', 'cortes', 'tintes', 'tinte', 'maquillaje'];
 
 const NAILS_TECHNIQUES_AVAIL = ['gel', 'softgel', 'acrilico'];
+const STYLING = ["Lacio_elegante", "Ondas_suaves_natural", "Brushing_movimiento", "NA"];
 const fixedDaySchema = z.enum(['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], {
   errorMap: () => ({ message: 'Day must be tuesday through saturday' }),
 });
@@ -132,6 +133,7 @@ export const bookingFixedSchema = z
     slot: z.number().int().min(11).max(18),
     service: z.enum(AVAILABILITY_SERVICES),
     nailsTechnique: z.enum(NAILS_TECHNIQUES_AVAIL).optional(),
+    styling: z.enum(STYLING).optional(),
     week: z
       .string()
       .transform((v) => (v ?? '').toLowerCase().trim())
@@ -158,6 +160,7 @@ export const bookingSchema = z.object({
   slot: z.number().int().min(MIN_HOUR).max(MAX_HOUR),
   serviceName: z.string().min(1, 'serviceName is required'),
   nailsTechnique: z.enum(NAILS_TECHNIQUES).optional(),
+  styling: z.enum(STYLING).optional(),
   customerName: z.string().optional(),
   customerInstagram: z.string().optional(),
   phoneNumber: z.string().optional(),

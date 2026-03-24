@@ -19,6 +19,7 @@ const GOOGLE_SHEETS_SECRET = process.env.GOOGLE_SHEETS_SECRET;
  * @param {number} booking.slotHour
  * @param {string} booking.serviceName
  * @param {string} [booking.nailsTechnique]
+ * @param {string} [booking.styling]
  * @param {string} [booking.role]
  * @param {string} [booking.customerName]
  * @param {string} [booking.customerInstagram]
