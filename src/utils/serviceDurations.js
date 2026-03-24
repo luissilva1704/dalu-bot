@@ -15,7 +15,7 @@ export const SERVICE_DURATION_HOURS = {
   pestañas: 3,
   pestanas: 3,
   cejas: 2,
-  cortes: 2,
+  corte: 2,
   tintes: 2,
   tinte: 2,
   pedicura: 2,
@@ -30,7 +30,7 @@ export const AVAILABILITY_SERVICES = [
   'pestañas',
   'pestanas',
   'cejas',
-  'cortes',
+  'corte',
   'tintes',
   'tinte',
   'maquillaje',
@@ -39,7 +39,7 @@ export const AVAILABILITY_SERVICES = [
 export const NAILS_TECHNIQUES = ['gel', 'softgel', 'acrilico'];
 
 /**
- * @param {string} service - uñas, pedicura, pestañas, cejas, cortes, tintes, maquillaje
+ * @param {string} service - uñas, pedicura, pestañas, cejas, corte, tintes, maquillaje
  * @param {string} [nailsTechnique] - gel, softgel, acrilico (required when service=uñas)
  * @returns {number} Duration in hours (0 if unknown)
  */

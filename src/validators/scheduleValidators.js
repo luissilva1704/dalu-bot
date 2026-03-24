@@ -54,7 +54,7 @@ export const createScheduleSchema = z.object({
 export const resetWeekSchema = z.object({});
 
 // --- Availability query: service REQUERIDO ---
-// service = uñas|pedicura|pestañas|cejas|cortes|tintes|maquillaje
+// service = uñas|pedicura|pestañas|cejas|corte|tintes|maquillaje
 // Cuando service=uñas, nailsTechnique (gel|softgel|acrilico) es requerido
 const AVAILABILITY_SERVICES = ['uñas', 'unas', 'pedicura', 'pestañas', 'pestanas', 'cejas', 'corte', 'tintes', 'tinte', 'maquillaje'];
 

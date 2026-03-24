@@ -6,7 +6,7 @@
  *
  * Grupos:
  * - nails: acrilico, gel, softgel (uñas)
- * - face_hair: cejas, pestañas, cortes, tintes
+ * - face_hair: cejas, pestañas, corte, tintes
  * - pedicure: pedicura
  * - makeup: maquillaje
  */
@@ -19,7 +19,7 @@ export const SERVICE_TO_GROUP = {
   cejas: 'face_hair',
   pestañas: 'face_hair',
   pestanas: 'face_hair',
-  cortes: 'face_hair',
+  corte: 'face_hair',
   tintes: 'face_hair',
   tinte: 'face_hair',
   pedicura: 'pedicure',
@@ -40,7 +40,7 @@ export const GROUP_CAPACITY = {
 /**
  * Obtiene el serviceGroup a partir del servicio.
  * Si service=uñas/unas, usa nailsTechnique como servicio efectivo.
- * @param {string} service - uñas, pedicura, pestañas, cejas, cortes, tintes, maquillaje
+ * @param {string} service - uñas, pedicura, pestañas, cejas, corte, tintes, maquillaje
  * @param {string} [nailsTechnique] - gel, softgel, acrilico (requerido cuando service=uñas)
  * @returns {string|null} serviceGroup o null si no existe
  */
@@ -83,7 +83,7 @@ export const ALLOWED_SERVICES = [
   'pestañas',
   'pestanas',
   'cejas',
-  'cortes',
+  'corte',
   'tintes',
   'tinte',
   'maquillaje',
