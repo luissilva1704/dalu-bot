@@ -46,12 +46,12 @@ export class CapacityRepository {
     const items = (result.Items ?? []).map((item) => ({
       ...item,
       slot: item.slot ?? parseInt(String(item.sk).replace(/.*S#/, '') || '0', 10),
-    }));
+    })).filter((item) => item.slot !== 19 && item.slot !== 20);
     return items.sort((a, b) => a.slot - b.slot);
   }
 
   /**
-   * Get capacity for a specific slot + serviceGroup.
+    * Get capacity for a specific slot + serviceGroup.
    */
   async getSlotCapacity(year, weekNumber, day, slot, serviceGroup) {
     const pk = capacityPk(year, weekNumber, day);
