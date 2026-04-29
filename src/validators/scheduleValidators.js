@@ -50,8 +50,17 @@ export const createScheduleSchema = z.object({
   availability: z.array(availabilityDaySchema).min(1, 'at least one day required'),
 });
 
-// --- Reset week (fixed capacity, no technicians) - sin parámetros, usa semana actual ---
-export const resetWeekSchema = z.object({});
+// --- Reset week (fixed capacity, no technicians) ---
+// Sin `weeks`: recrea offset +1 y +2 desde la fecha actual (CDMX).
+// Con `weeks`: exactamente 2 ISO weeks { year, weekNumber }, ej. 18 y 19 o 19 y 20.
+const resetWeekPairSchema = z.object({
+  year: z.coerce.number().int().min(2020).max(2100),
+  weekNumber: z.coerce.number().int().min(1).max(53),
+});
+
+export const resetWeekSchema = z.object({
+  weeks: z.array(resetWeekPairSchema).length(2).optional(),
+});
 
 // --- Availability query: service REQUERIDO ---
 // service = uñas|pedicura|pestañas|cejas|corte|tintes|maquillaje

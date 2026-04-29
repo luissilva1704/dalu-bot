@@ -111,6 +111,15 @@ export function getCurrentWeekMexico() {
   return { year, weekNumber };
 }
 
+/** Dedupe { year, weekNumber } por par ISO (misma entrada conserva una sola copia). */
+export function uniqISOWeeks(weeks) {
+  const map = new Map();
+  for (const w of weeks) {
+    map.set(`${w.year}#${w.weekNumber}`, w);
+  }
+  return [...map.values()];
+}
+
 /**
  * Get the next ISO week and year for America/Mexico_City.
  * Used by schedules-reset when run on Saturday to prepare the following week.

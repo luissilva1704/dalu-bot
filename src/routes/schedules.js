@@ -8,7 +8,7 @@ import {
   technicianScheduleQuerySchema,
   resetWeekSchema,
 } from '../validators/scheduleValidators.js';
-import { getCurrentWeekMexico, getWeekOffsetMexico } from '../utils/week.js';
+import { getCurrentWeekMexico, getWeekOffsetMexico, uniqISOWeeks } from '../utils/week.js';
 import { normalizeDay } from '../utils/dayMapping.js';
 
 function formatSlotsAsHhMm(slots) {
@@ -21,13 +21,12 @@ const router = express.Router();
 // Resetea la semana actual y crea capacidad para las dos semanas siguientes (12 y 13).
 router.post('/reset-week', async (req, res, next) => {
   try {
-    resetWeekSchema.parse(req.body ?? {});
+    const parsed = resetWeekSchema.parse(req.body ?? {});
     const current = getCurrentWeekMexico();
-    const week1 = getWeekOffsetMexico(1); // siguiente
-    const week2 = getWeekOffsetMexico(2); // siguiente+1
+    const week1 = parsed.weeks?.[0] ?? getWeekOffsetMexico(1);
+    const week2 = parsed.weeks?.[1] ?? getWeekOffsetMexico(2);
 
-    await capacityRepo.deleteWeek([current, week1, week2]);
-    // Ejecutar ambas semanas en paralelo
+    await capacityRepo.deleteWeek(uniqISOWeeks([current, week1, week2]));
     const [summary1, summary2] = await Promise.all([
       capacityRepo.resetWeek(week1.year, week1.weekNumber),
       capacityRepo.resetWeek(week2.year, week2.weekNumber),
@@ -35,6 +34,10 @@ router.post('/reset-week', async (req, res, next) => {
 
     res.json({
       message: 'Week capacity reset successfully (2 weeks)',
+      weeksConfigured: [
+        { year: week1.year, weekNumber: week1.weekNumber },
+        { year: week2.year, weekNumber: week2.weekNumber },
+      ],
       weeksCreated: [
         { year: week1.year, weekNumber: week1.weekNumber, ...summary1 },
         { year: week2.year, weekNumber: week2.weekNumber, ...summary2 },

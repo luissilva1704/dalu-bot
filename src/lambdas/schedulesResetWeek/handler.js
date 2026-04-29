@@ -1,11 +1,13 @@
 /**
  * POST /api/schedules/reset-week
  * Admin endpoint: reset fixed weekly capacity (tuesday-saturday, slots 11-20, capacity 2 each).
+ * Body opcional: { "weeks": [ { "year": 2026, "weekNumber": 18 }, { "year": 2026, "weekNumber": 19 } ] } (2 ISO semanas).
+ * Sin body / sin weeks: mismo comportamiento anterior (offsets +1 y +2 desde hoy CDMX).
  * Idempotent - replaces existing capacity for the week.
  */
 
 import capacityRepo from '../../repositories/capacityRepo.js';
-import { getCurrentWeekMexico, getWeekOffsetMexico } from '../../utils/week.js';
+import { getCurrentWeekMexico, getWeekOffsetMexico, uniqISOWeeks } from '../../utils/week.js';
 import { resetWeekSchema } from '../../validators/scheduleValidators.js';
 
 const json = (statusCode, data) => ({
@@ -32,13 +34,12 @@ function parseBody(event) {
 export const handler = async (event) => {
   try {
     const body = parseBody(event);
-    resetWeekSchema.parse(body ?? {});
+    const parsed = resetWeekSchema.parse(body ?? {});
     const current = getCurrentWeekMexico();
-    const week1 = getWeekOffsetMexico(1); // siguiente
-    const week2 = getWeekOffsetMexico(2); // siguiente+1
+    const week1 = parsed.weeks?.[0] ?? getWeekOffsetMexico(1);
+    const week2 = parsed.weeks?.[1] ?? getWeekOffsetMexico(2);
 
-    await capacityRepo.deleteWeek([current, week1, week2]);
-    // Ejecutar ambas semanas en paralelo para reducir tiempo y evitar timeout
+    await capacityRepo.deleteWeek(uniqISOWeeks([current, week1, week2]));
     const [result1, result2] = await Promise.all([
       capacityRepo.resetWeek(week1.year, week1.weekNumber),
       capacityRepo.resetWeek(week2.year, week2.weekNumber),
@@ -46,6 +47,7 @@ export const handler = async (event) => {
 
     return json(200, {
       message: 'Week reset successfully (2 weeks)',
+      weeksConfigured: [{ year: week1.year, weekNumber: week1.weekNumber }, { year: week2.year, weekNumber: week2.weekNumber }],
       weeksCreated: [
         { year: week1.year, weekNumber: week1.weekNumber, ...result1 },
         { year: week2.year, weekNumber: week2.weekNumber, ...result2 },
