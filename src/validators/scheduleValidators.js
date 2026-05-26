@@ -71,8 +71,8 @@ const NAILS_TECHNIQUES_AVAIL = ['gel', 'softgel', 'acrilico','Corte_styling', 'D
   'Ampolleta_brillo', 'Tinte_completo', 'Retoque_raiz', 'Baño_color', 'Matiz', 'Cubrimiento_canas',
 'Wispy','Foxy', 'Pop_color_gliter', 'Rimel', 'Mojado', 'Anime', 'Clasicas', 'Hibridas', 'Volumen', 'Hawaianas','Volumen_hawaiano','Volumen_griego', 'Angel', 'Kylie', 'Bratz'];
 const STYLING = ["Lacio_elegante", "Ondas_suaves_natural", "Brushing_movimiento", "NA", 'Retoque', 'Aplicación_nueva'];
-const fixedDaySchema = z.enum(['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], {
-  errorMap: () => ({ message: 'Day must be tuesday through saturday' }),
+const fixedDaySchema = z.enum(['monday','tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], {
+  errorMap: () => ({ message: 'Day must be monday through saturday' }),
 });
 
 const WEEK_VALUES_AVAIL = ['actual', 'current', 'siguiente', 'next'];
@@ -83,7 +83,7 @@ export const availabilityQuerySchema = z
       .string()
       .transform((v) => {
         const d = (v ?? '').toLowerCase().trim();
-        return SPANISH_DAYS[d] ?? (['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(d) ? d : v);
+        return SPANISH_DAYS[d] ?? (['monday','tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(d) ? d : v);
       })
       .pipe(fixedDaySchema)
       .optional(),
@@ -138,7 +138,7 @@ export const bookingFixedSchema = z
       .string()
       .transform((v) => {
         const d = (v ?? '').toLowerCase().trim();
-        return SPANISH_DAYS[d] ?? (['tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(d) ? d : v);
+        return SPANISH_DAYS[d] ?? (['monday','tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].includes(d) ? d : v);
       })
       .pipe(fixedDaySchema),
     slot: z.number().int().min(11).max(18),
