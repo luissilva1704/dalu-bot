@@ -1,29 +1,19 @@
 /**
  * Availability - Fixed weekly capacity (NO technicians).
  * Reads ONLY from dalu-capacity.
- * When service is provided, computes canStartBooking from consecutive slot capacity.
+ * Computes canStartBooking from visible consecutive slot capacity.
  */
 
 import express from 'express';
 import capacityRepo from '../repositories/capacityRepo.js';
 import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, isDayBeforeToday } from '../utils/week.js';
 import { FIXED_DAYS } from '../utils/fixedSchedule.js';
-import { getServiceDuration } from '../utils/serviceDurations.js';
+import { computeCanStartBooking, getServiceDuration } from '../utils/serviceDurations.js';
+import { getServiceGroup } from '../utils/serviceGroups.js';
 import { normalizeDay } from '../utils/dayMapping.js';
 import { availabilityQuerySchema } from '../validators/scheduleValidators.js';
 
 const router = express.Router();
-
-function computeCanStartBooking(slots, slotIndex, durationHours) {
-  if (!durationHours || durationHours < 1) return true;
-  const slot = slots[slotIndex];
-  if (!slot || (slot.capacityAvailable ?? 0) <= 0) return false;
-  for (let i = 1; i < durationHours; i++) {
-    const next = slots[slotIndex + i];
-    if (!next || (next.capacityAvailable ?? 0) <= 0) return false;
-  }
-  return true;
-}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -46,6 +36,14 @@ router.get('/', async (req, res, next) => {
       ({ year, weekNumber } = getBookingWeekMexico());
     }
 
+    const serviceGroup = getServiceGroup(service, nailsTechnique);
+    if (!serviceGroup) {
+      return res.status(400).json({
+        error: 'Invalid service',
+        message: 'service no válido o falta nailsTechnique cuando service=uñas',
+      });
+    }
+
     const durationHours = service ? getServiceDuration(service, nailsTechnique) : 0;
 
     if (qDay) {
@@ -54,6 +52,7 @@ router.get('/', async (req, res, next) => {
           day: qDay,
           service: service ?? null,
           nailsTechnique: nailsTechnique ?? null,
+          serviceGroup,
           year,
           weekNumber,
           slots: [],
@@ -61,7 +60,7 @@ router.get('/', async (req, res, next) => {
         });
       }
 
-      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, qDay);
+      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, qDay, serviceGroup);
 
       if (capacityItems.length === 0) {
         return res.status(404).json({
@@ -90,6 +89,7 @@ router.get('/', async (req, res, next) => {
         day: qDay,
         service: service ?? null,
         nailsTechnique: nailsTechnique ?? null,
+        serviceGroup,
         year,
         weekNumber,
         slots,
@@ -101,7 +101,7 @@ router.get('/', async (req, res, next) => {
     for (const day of FIXED_DAYS) {
       if (isDayBeforeToday(year, weekNumber, day)) continue;
 
-      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day);
+      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day, serviceGroup);
       if (capacityItems.length === 0) continue;
 
       const slots = capacityItems.map((item, idx) => ({
@@ -130,7 +130,7 @@ router.get('/', async (req, res, next) => {
       });
     }
 
-    res.json({ availability, weekNumber, year, service: service ?? null, nailsTechnique: nailsTechnique ?? null });
+    res.json({ availability, weekNumber, year, service: service ?? null, nailsTechnique: nailsTechnique ?? null, serviceGroup });
   } catch (error) {
     next(error);
   }

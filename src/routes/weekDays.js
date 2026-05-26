@@ -1,6 +1,7 @@
 /**
  * GET /api/week-days?week=actual|siguiente&service=pedicura
  * Devuelve los días con disponibilidad para ese servicio.
+ * Considera la duración solo hasta el último horario reservable.
  * Requiere service (y nailsTechnique cuando service=uñas).
  */
 

@@ -1,6 +1,6 @@
 /**
  * Bookings Lambda - Fixed weekly capacity (NO technicians).
- * Blocks multiple consecutive slots based on service duration.
+ * Blocks visible consecutive slots based on service duration.
  * Same flow as routes/bookings.js
  */
 
@@ -8,7 +8,7 @@ import capacityRepo from '../../repositories/capacityRepo.js';
 import bookingsRepo from '../../repositories/bookingsRepo.js';
 import { sendBookingToGoogleSheets } from '../../services/googleSheetsWebhook.js';
 import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, getMonthAndDayFromWeek } from '../../utils/week.js';
-import { getServiceDuration, buildBlockedSlots } from '../../utils/serviceDurations.js';
+import { buildBlockedSlots, computeCanStartBooking, getServiceDuration } from '../../utils/serviceDurations.js';
 import { getServiceGroup } from '../../utils/serviceGroups.js';
 import { normalizeDay } from '../../utils/dayMapping.js';
 import { bookingFixedSchema } from '../../validators/scheduleValidators.js';
@@ -127,19 +127,13 @@ export const handler = async (event) => {
 
     await sendBookingToGoogleSheets(booking, year, day, month, dayOfMonth);
     const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day, serviceGroup);
-    const slotsWithCanStart = capacityItems.map((item, idx) => {
-      let canStart = (item.capacityAvailable ?? 0) > 0;
-      if (durationHours > 0) {
-        for (let i = 0; i < durationHours; i++) {
-          const next = capacityItems[idx + i];
-          if (!next || (next.capacityAvailable ?? 0) <= 0) {
-            canStart = false;
-            break;
-          }
-        }
-      }
-      return { ...item, canStartBooking: canStart };
-    });
+    const slotsWithCanStart = capacityItems.map((item, idx) => ({
+      ...item,
+      canStartBooking:
+        durationHours > 0
+          ? computeCanStartBooking(capacityItems, idx, durationHours)
+          : (item.capacityAvailable ?? 0) > 0,
+    }));
     const availableStartSlots = slotsWithCanStart.filter((s) => s.canStartBooking).map((s) => s.slot);
 
     return json(201, {

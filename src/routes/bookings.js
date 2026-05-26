@@ -1,6 +1,6 @@
 /**
  * Bookings - Fixed weekly capacity (NO technicians).
- * Blocks multiple consecutive slots based on service duration.
+ * Blocks visible consecutive slots based on service duration.
  */
 
 import express from 'express';
@@ -8,7 +8,8 @@ import capacityRepo from '../repositories/capacityRepo.js';
 import bookingsRepo from '../repositories/bookingsRepo.js';
 import { sendBookingToGoogleSheets } from '../services/googleSheetsWebhook.js';
 import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, getMonthAndDayFromWeek } from '../utils/week.js';
-import { getServiceDuration, buildBlockedSlots } from '../utils/serviceDurations.js';
+import { buildBlockedSlots, computeCanStartBooking, getServiceDuration } from '../utils/serviceDurations.js';
+import { getServiceGroup } from '../utils/serviceGroups.js';
 import { normalizeDay } from '../utils/dayMapping.js';
 import { bookingFixedSchema } from '../validators/scheduleValidators.js';
 
@@ -25,7 +26,7 @@ function normalizeSlot(slot) {
   return slot;
 }
 
-// PUT /api/bookings - Create booking (blocks multiple slots by service duration)
+// PUT /api/bookings - Create booking (blocks visible slots by service duration)
 router.put('/', async (req, res, next) => {
   try {
     const body = { ...req.body };
@@ -43,6 +44,14 @@ router.put('/', async (req, res, next) => {
       ({ year, weekNumber } = getBookingWeekMexico());
     }
 
+    const serviceGroup = getServiceGroup(service, nailsTechnique);
+    if (!serviceGroup) {
+      return res.status(400).json({
+        error: 'Invalid service',
+        message: 'service no válido o falta nailsTechnique cuando service=uñas',
+      });
+    }
+
     const durationHours = getServiceDuration(service, nailsTechnique);
     if (!durationHours) {
       return res.status(400).json({
@@ -54,7 +63,7 @@ router.put('/', async (req, res, next) => {
     const slotsBlocked = buildBlockedSlots(slot, durationHours);
 
     for (const s of slotsBlocked) {
-      const cap = await capacityRepo.getSlotCapacity(year, weekNumber, day, s);
+      const cap = await capacityRepo.getSlotCapacity(year, weekNumber, day, s, serviceGroup);
       if (!cap) {
         return res.status(404).json({
           error: 'Not found',
@@ -69,7 +78,7 @@ router.put('/', async (req, res, next) => {
       }
     }
 
-    const capacityTransactItems = capacityRepo.buildDecrementTransactItems(year, weekNumber, day, slotsBlocked);
+    const capacityTransactItems = capacityRepo.buildDecrementTransactItems(year, weekNumber, day, slotsBlocked, serviceGroup);
 
     const booking = await bookingsRepo.createBookingWithCapacityDecrement({
       year,
@@ -79,6 +88,7 @@ router.put('/', async (req, res, next) => {
       slotsBlocked,
       service,
       nailsTechnique: nailsTechnique ?? null,
+      serviceGroup,
       durationHours,
       customerName: customerName ?? null,
       customerInstagram: customerInstagram ?? null,
@@ -89,21 +99,15 @@ router.put('/', async (req, res, next) => {
     const { month, dayOfMonth } = getMonthAndDayFromWeek(year, weekNumber, day);
     await sendBookingToGoogleSheets(booking, year, day, month, dayOfMonth);
 
-    const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day);
+    const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day, serviceGroup);
     const duration = getServiceDuration(service, nailsTechnique);
-    const slotsWithCanStart = capacityItems.map((item, idx) => {
-      let canStart = (item.capacityAvailable ?? 0) > 0;
-      if (duration > 0) {
-        for (let i = 0; i < duration; i++) {
-          const next = capacityItems[idx + i];
-          if (!next || (next.capacityAvailable ?? 0) <= 0) {
-            canStart = false;
-            break;
-          }
-        }
-      }
-      return { ...item, canStartBooking: canStart };
-    });
+    const slotsWithCanStart = capacityItems.map((item, idx) => ({
+      ...item,
+      canStartBooking:
+        duration > 0
+          ? computeCanStartBooking(capacityItems, idx, duration)
+          : (item.capacityAvailable ?? 0) > 0,
+    }));
     const availableStartSlotsArr = slotsWithCanStart.filter((s) => s.canStartBooking).map((s) => s.slot);
     const availableStartSlots = availableStartSlotsArr.map((s) => `${s}:00`).join(', ');
 
@@ -116,6 +120,7 @@ router.put('/', async (req, res, next) => {
         slotsBlocked: booking.slotsBlocked,
         service: booking.service,
         nailsTechnique: booking.nailsTechnique ?? null,
+        serviceGroup: booking.serviceGroup ?? null,
         durationHours: booking.durationHours,
         status: booking.status,
         customerName: booking.customerName,

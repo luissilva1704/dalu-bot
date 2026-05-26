@@ -8,7 +8,7 @@
 import capacityRepo from '../../repositories/capacityRepo.js';
 import { getBookingWeekMexico, getAvailabilityWeekOffsetMexico, isDayBeforeToday } from '../../utils/week.js';
 import { FIXED_DAYS } from '../../utils/fixedSchedule.js';
-import { getServiceDuration } from '../../utils/serviceDurations.js';
+import { computeCanStartBooking, getServiceDuration } from '../../utils/serviceDurations.js';
 import { getServiceGroup } from '../../utils/serviceGroups.js';
 import { normalizeDay } from '../../utils/dayMapping.js';
 import { availabilityQuerySchema } from '../../validators/scheduleValidators.js';
@@ -21,17 +21,6 @@ const json = (statusCode, data) => ({
   },
   body: JSON.stringify(data),
 });
-
-function computeCanStartBooking(capacityItems, slotIndex, durationHours) {
-  if (!durationHours || durationHours < 1) return true;
-  const slot = capacityItems[slotIndex];
-  if (!slot || (slot.capacityAvailable ?? 0) <= 0) return false;
-  for (let i = 1; i < durationHours; i++) {
-    const next = capacityItems[slotIndex + i];
-    if (!next || (next.capacityAvailable ?? 0) <= 0) return false;
-  }
-  return true;
-}
 
 export const handler = async (event) => {
   try {

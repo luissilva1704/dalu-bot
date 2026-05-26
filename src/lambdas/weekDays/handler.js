@@ -2,7 +2,7 @@
  * Lambda: week-days
  * GET ?week=actual|siguiente&service=pedicura&nailsTechnique=gel (si service=uñas)
  * Devuelve los días con disponibilidad para ese servicio en dalu-capacity.
- * Considera la duración del servicio (slots consecutivos necesarios).
+ * Considera la duración del servicio hasta el último horario reservable.
  */
 
 import capacityRepo from '../../repositories/capacityRepo.js';
