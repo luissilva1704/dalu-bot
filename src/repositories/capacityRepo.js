@@ -112,6 +112,25 @@ export class CapacityRepository {
   }
 
   /**
+   * Lista cuáles semanas candidatas existen en dalu-capacity usando Query por pk.
+   * Evita Scan porque el rol de Lambda de producción no lo necesita ni lo permite.
+   */
+  async listConfiguredWeeks(candidateWeeks) {
+    const configuredWeeks = [];
+
+    for (const week of candidateWeeks ?? []) {
+      const dayResults = await Promise.all(
+        FIXED_DAYS.map((day) => this.hasCapacityForDay(week.year, week.weekNumber, day))
+      );
+      const hasCapacity = dayResults.some(Boolean);
+
+      if (hasCapacity) configuredWeeks.push(week);
+    }
+
+    return configuredWeeks;
+  }
+
+  /**
    * Borra todos los items de capacidad de una o más semanas.
    * Query por pk devuelve todos los items (todas las sk).
    */

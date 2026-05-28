@@ -265,6 +265,12 @@ export function isDayBeforeToday(year, weekNumber, dayName) {
   return dayDate.day < today.day;
 }
 
+export function isDayToday(year, weekNumber, dayName) {
+  const today = getMexicoCityDate();
+  const dayDate = getDateForWeekDay(year, weekNumber, dayName);
+  return dayDate.year === today.year && dayDate.month === today.month && dayDate.day === today.day;
+}
+
 export function isSlotBeforeNow(year, weekNumber, dayName, slot) {
   const now = getMexicoCityDateTime();
   const dayDate = getDateForWeekDay(year, weekNumber, dayName);
