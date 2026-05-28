@@ -11,6 +11,7 @@ import {
   getAvailabilityWeekOffsetMexico,
   formatWeekDays,
   isDayBeforeToday,
+  isSlotBeforeNow,
 } from '../utils/week.js';
 import { FIXED_DAYS } from '../utils/fixedSchedule.js';
 import { getServiceGroup } from '../utils/serviceGroups.js';
@@ -52,7 +53,8 @@ router.get('/', async (req, res, next) => {
     for (const day of FIXED_DAYS) {
       if (isDayBeforeToday(year, weekNumber, day)) continue;
 
-      const capacityItems = await capacityRepo.getCapacityForDay(year, weekNumber, day, serviceGroup);
+      const capacityItems = (await capacityRepo.getCapacityForDay(year, weekNumber, day, serviceGroup))
+        .filter((item) => !isSlotBeforeNow(year, weekNumber, day, item.slot));
       if (dayHasAvailableStartSlot(capacityItems, durationHours)) {
         daysWithCapacity.push(day);
       }

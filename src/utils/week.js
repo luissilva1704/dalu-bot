@@ -44,6 +44,27 @@ function getMexicoCityDate(now = new Date()) {
   };
 }
 
+function getMexicoCityDateTime(now = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type) => parseInt(parts.find((p) => p.type === type)?.value ?? '0', 10);
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+  };
+}
+
 /**
  * Get ISO week number (1-53) for a given date
  * ISO 8601: Week starts on Monday. Week 1 contains Jan 4th.
@@ -242,6 +263,18 @@ export function isDayBeforeToday(year, weekNumber, dayName) {
   if (dayDate.month < today.month) return true;
   if (dayDate.month > today.month) return false;
   return dayDate.day < today.day;
+}
+
+export function isSlotBeforeNow(year, weekNumber, dayName, slot) {
+  const now = getMexicoCityDateTime();
+  const dayDate = getDateForWeekDay(year, weekNumber, dayName);
+
+  if (dayDate.year !== now.year || dayDate.month !== now.month || dayDate.day !== now.day) {
+    return false;
+  }
+
+  if (slot < now.hour) return true;
+  return slot === now.hour && now.minute > 0;
 }
 
 /**
